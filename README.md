@@ -1,6 +1,4 @@
-# Spreadheet
-
-This is not just another generic spreadsheet system. This is Spreadheet.
+# Spreadsheets
 
 Pardon the lack of Git history. This project was originally built into a larger repo before being pulled out. 
 
