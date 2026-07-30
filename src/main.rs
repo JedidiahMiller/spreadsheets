@@ -1,4 +1,5 @@
 mod cell_context;
+mod column;
 mod curse_controller;
 mod errors;
 mod expressions;

@@ -4,6 +4,7 @@ use pancurses::{
 use pancurses::{Window, curs_set, endwin, initscr, noecho};
 
 use crate::cell_context::CellContext;
+use crate::column::column_index_to_letters;
 use crate::curse_controller::OperationMode::{Edit, Normal};
 use crate::errors::SourceCodeError;
 use crate::errors::{Error, ErrorType::*};
@@ -599,12 +600,12 @@ impl CurseController {
             }
         }
 
-        // Number the rows and columns
+        // Label the rows and columns to match cell reference syntax (A2, AB12, ...)
         for col in 0..((grid_width / GAP_SIZE) - 1) {
-            self.add_centered_cell_text(col, -1, col.to_string());
+            self.add_centered_cell_text(col, -1, column_index_to_letters(col));
         }
         for row in 0..(self.grid_window.get_max_y() / 2) {
-            self.add_centered_cell_text(-1, row, row.to_string());
+            self.add_centered_cell_text(-1, row, (row + 1).to_string());
         }
     }
 }

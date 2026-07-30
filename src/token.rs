@@ -57,12 +57,11 @@ pub enum TokenType {
 
     OpeningParenthesis,
     ClosingParenthesis,
-    OpeningSquareBracket,
-    ClosingSquareBracket,
     PoundSign,
     Comma,
 
     Number,
+    CellReference,
 
     Addition,
     Subtraction,

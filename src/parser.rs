@@ -1,5 +1,6 @@
 use std::{usize, vec};
 
+use crate::column::column_letters_to_index;
 use crate::errors::SourceCodeError;
 use crate::expressions::Expression;
 use crate::token::{Token, TokenType};
@@ -205,38 +206,17 @@ impl Parser {
             });
         }
         if self.accept(TokenType::PoundSign)? {
-            self.expect(TokenType::OpeningSquareBracket)?;
-            let x_val = self.expression_level_1()?;
-            self.expect(TokenType::Comma)?;
-            let y_val = self.expression_level_1()?;
-
-            let token = self.expect(TokenType::ClosingSquareBracket)?;
-            let address = Expression::CellAddress {
-                source_token: token.clone(),
-                x_value: Box::new(x_val),
-                y_value: Box::new(y_val),
-            };
-
+            let token = self.expect(TokenType::CellReference)?;
             return Ok(Expression::RValue {
-                source_token: token,
-                cell_address: Box::new(address),
+                source_token: token.clone(),
+                cell_address: Box::new(Self::parse_cell_reference(token)),
             });
         }
-        if self.accept(TokenType::OpeningSquareBracket)? {
-            let x_val = self.expression_level_1()?;
-            self.expect(TokenType::Comma)?;
-            let y_val = self.expression_level_1()?;
-
-            let token = self.expect(TokenType::ClosingSquareBracket)?;
-            let address = Expression::CellAddress {
-                source_token: token.clone(),
-                x_value: Box::new(x_val),
-                y_value: Box::new(y_val),
-            };
-
+        if self.has(TokenType::CellReference) {
+            let token = self.consume()?;
             return Ok(Expression::LValue {
-                source_token: token,
-                cell_address: Box::new(address),
+                source_token: token.clone(),
+                cell_address: Box::new(Self::parse_cell_reference(token)),
             });
         }
 
@@ -253,6 +233,34 @@ impl Parser {
             location: vec![],
             error_message: String::from("Incomplete expression"),
         })
+    }
+
+    // The lexer guarantees a CellReference token's source is column letters
+    // followed by a row number, ie "ab12".
+    fn parse_cell_reference(token: Token) -> Expression {
+        let split_at = token
+            .source
+            .find(|c: char| c.is_ascii_digit())
+            .expect("Lexer should guarantee a row number follows column letters");
+        let (letters, digits) = token.source.split_at(split_at);
+
+        let column = column_letters_to_index(letters)
+            .expect("Lexer should guarantee only letters precede the row number");
+        let row_number: i32 = digits
+            .parse()
+            .expect("Lexer should guarantee a valid row number");
+
+        Expression::CellAddress {
+            source_token: token.clone(),
+            x_value: Box::new(Expression::Number {
+                source_token: token.clone(),
+                value: column as f64,
+            }),
+            y_value: Box::new(Expression::Number {
+                source_token: token,
+                value: (row_number - 1) as f64,
+            }),
+        }
     }
 }
 
@@ -312,20 +320,25 @@ mod tests {
 
     #[test]
     fn parses_lvalue_cell_address() {
-        assert_eq!(serialized("[1,2]"), "[1, 2]");
+        assert_eq!(serialized("B3"), "B3");
+    }
+
+    #[test]
+    fn parses_multi_letter_column_cell_address() {
+        assert_eq!(serialized("AB12"), "AB12");
     }
 
     #[test]
     fn parses_rvalue_cell_address() {
-        assert_eq!(serialized("#[1,2]"), "#[1, 2]");
+        assert_eq!(serialized("#B3"), "#B3");
     }
 
     #[test]
     fn parses_aggregate_functions() {
-        assert_eq!(serialized("sum([0,0],[1,1])"), "Sum([0, 0], [1, 1])");
-        assert_eq!(serialized("max([0,0],[1,1])"), "Max([0, 0], [1, 1])");
-        assert_eq!(serialized("min([0,0],[1,1])"), "Min([0, 0], [1, 1])");
-        assert_eq!(serialized("mean([0,0],[1,1])"), "Mean([0, 0], [1, 1])");
+        assert_eq!(serialized("sum(A1,B2)"), "Sum(A1, B2)");
+        assert_eq!(serialized("max(A1,B2)"), "Max(A1, B2)");
+        assert_eq!(serialized("min(A1,B2)"), "Min(A1, B2)");
+        assert_eq!(serialized("mean(A1,B2)"), "Mean(A1, B2)");
     }
 
     #[test]
@@ -345,6 +358,6 @@ mod tests {
 
     #[test]
     fn errors_on_missing_comma_in_function_call() {
-        assert!(parse("sum([0,0] [1,1])").is_err());
+        assert!(parse("sum(A1 B2)").is_err());
     }
 }

@@ -85,8 +85,6 @@ impl Lexer {
             // Parentheses
             ("(".to_string(), TokenType::OpeningParenthesis),
             (")".to_string(), TokenType::ClosingParenthesis),
-            ("[".to_string(), TokenType::OpeningSquareBracket),
-            ("]".to_string(), TokenType::ClosingSquareBracket),
             ("#".to_string(), TokenType::PoundSign),
             (",".to_string(), TokenType::Comma),
             // Keywords
@@ -135,6 +133,24 @@ impl Lexer {
             }
 
             // Capture primatives (These are more dynamic).
+
+            // Cell references, ie A2 or AB12: column letters followed by a row number
+            if lexer.peek().unwrap().is_ascii_alphabetic() {
+                while lexer.peek().is_ok() && lexer.peek().unwrap().is_ascii_alphabetic() {
+                    lexer.capture();
+                }
+                if lexer.peek().is_ok() && lexer.peek().unwrap().is_digit(10) {
+                    while lexer.peek().is_ok() && lexer.peek().unwrap().is_digit(10) {
+                        lexer.capture();
+                    }
+                    lexer.save_token(TokenType::CellReference);
+                    continue;
+                }
+                return Err(SourceCodeError {
+                    location: vec![lexer.current_token_start],
+                    error_message: String::from("Cell reference must end with a row number"),
+                });
+            }
 
             // Numeric primitives
             if lexer.peek().unwrap().is_digit(10) {
@@ -192,16 +208,35 @@ mod tests {
     #[test]
     fn lexes_symbols() {
         assert_eq!(
-            types("()[]#,"),
+            types("()#,"),
             vec![
                 TokenType::OpeningParenthesis,
                 TokenType::ClosingParenthesis,
-                TokenType::OpeningSquareBracket,
-                TokenType::ClosingSquareBracket,
                 TokenType::PoundSign,
                 TokenType::Comma,
             ]
         );
+    }
+
+    #[test]
+    fn lexes_single_letter_cell_reference() {
+        let tokens = Lexer::lex(&"A2".to_string()).unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::CellReference);
+        assert_eq!(tokens[0].source, "a2");
+    }
+
+    #[test]
+    fn lexes_multi_letter_cell_reference() {
+        let tokens = Lexer::lex(&"AB12".to_string()).unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::CellReference);
+        assert_eq!(tokens[0].source, "ab12");
+    }
+
+    #[test]
+    fn errors_on_column_letters_without_a_row_number() {
+        assert!(Lexer::lex(&"AB".to_string()).is_err());
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use crate::cell_context::CellContext;
+use crate::column::column_index_to_letters;
 use crate::runtime::Runtime;
 use crate::token::Token;
 
@@ -99,11 +100,16 @@ impl Expression {
                 source_token: _,
                 x_value,
                 y_value,
-            } => Ok(format!(
-                "[{}, {}]",
-                x_value.serialize()?,
-                y_value.serialize()?
-            )),
+            } => match (x_value.as_ref(), y_value.as_ref()) {
+                (Expression::Number { value: x, .. }, Expression::Number { value: y, .. }) => Ok(
+                    format!("{}{}", column_index_to_letters(*x as i32), *y as i32 + 1),
+                ),
+                _ => Ok(format!(
+                    "[{}, {}]",
+                    x_value.serialize()?,
+                    y_value.serialize()?
+                )),
+            },
 
             Expression::Addition {
                 source_token: _,
