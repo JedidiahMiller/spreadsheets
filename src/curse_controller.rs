@@ -1,14 +1,15 @@
-
 use pancurses::{curs_set, endwin, initscr, noecho, Window};
-use pancurses::{ACS_HLINE, ACS_VLINE, ACS_ULCORNER, ACS_URCORNER, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS};
+use pancurses::{
+    ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS, ACS_ULCORNER, ACS_URCORNER, ACS_VLINE,
+};
 
 use crate::cell_context::CellContext;
 use crate::errors::SourceCodeError;
-use crate::errors::{Error, ErrorType::* };
+use crate::errors::{Error, ErrorType::*};
 use crate::grid::Cell;
-use crate::runtime::Runtime;
-use crate::parser::Parser;
 use crate::lexer::Lexer;
+use crate::parser::Parser;
+use crate::runtime::Runtime;
 use crate::token::TokenType;
 
 const GAP_SIZE: i32 = 15;
@@ -27,22 +28,26 @@ pub struct CurseController {
     runtime: Box<Runtime>,
     editing_source: bool,
     new_source_code: String,
-    feedback: (String, String, String)
+    feedback: (String, String, String),
 }
 
 impl CurseController {
-
     pub fn new() -> Result<CurseController, Error> {
         let master_window = initscr();
         noecho();
         curs_set(0);
         master_window.keypad(true);
 
-        if master_window.get_max_x() < TERMINAL_MIN_WIDTH || master_window.get_max_y() < TERMINAL_MIN_HEIGHT {
+        if master_window.get_max_x() < TERMINAL_MIN_WIDTH
+            || master_window.get_max_y() < TERMINAL_MIN_HEIGHT
+        {
             Self::exit();
             eprintln!(
                 "Please resize your terminal to at least {}x{} (currently {}x{})",
-                TERMINAL_MIN_WIDTH, TERMINAL_MIN_HEIGHT, master_window.get_max_x(), master_window.get_max_y()
+                TERMINAL_MIN_WIDTH,
+                TERMINAL_MIN_HEIGHT,
+                master_window.get_max_x(),
+                master_window.get_max_y()
             );
             std::process::exit(1);
         }
@@ -55,21 +60,36 @@ impl CurseController {
         let source_code_window: Window;
         match master_window.subwin(SOURCE_CODE_WINDOW, x, 0, 0) {
             Ok(window) => source_code_window = window,
-            Err(_) => return Err(Error { error_type: UnexpectedError , error_message: "Couldn't create source code window".to_string() })
+            Err(_) => {
+                return Err(Error {
+                    error_type: UnexpectedError,
+                    error_message: "Couldn't create source code window".to_string(),
+                })
+            }
         }
 
         // Grid window
         let grid_window: Window;
         match master_window.subwin(grid_height, x, SOURCE_CODE_WINDOW, 0) {
             Ok(window) => grid_window = window,
-            Err(_) => return Err(Error { error_type: UnexpectedError , error_message: "Couldn't create grid window".to_string() })
+            Err(_) => {
+                return Err(Error {
+                    error_type: UnexpectedError,
+                    error_message: "Couldn't create grid window".to_string(),
+                })
+            }
         }
 
         // Data window
         let data_window: Window;
         match master_window.subwin(FEEDBACK_WINDOW, x, SOURCE_CODE_WINDOW + grid_height, 0) {
             Ok(window) => data_window = window,
-            Err(_) => return Err(Error { error_type: UnexpectedError , error_message: "Couldn't create data window".to_string() })
+            Err(_) => {
+                return Err(Error {
+                    error_type: UnexpectedError,
+                    error_message: "Couldn't create data window".to_string(),
+                })
+            }
         }
 
         // Grid size
@@ -99,7 +119,7 @@ impl CurseController {
             runtime,
             editing_source,
             new_source_code,
-            feedback
+            feedback,
         })
     }
 
@@ -107,66 +127,79 @@ impl CurseController {
         loop {
             self.render();
             let key = self.master_window.getch();
-            if key.is_none() {continue;};
+            if key.is_none() {
+                continue;
+            };
             let key = key.unwrap();
 
             // Hotkeys
             match key {
-                pancurses::Input::Character('q') => { // Quit command
+                pancurses::Input::Character('q') => {
+                    // Quit command
                     if !self.editing_source {
                         Self::exit();
-                        return Ok(())
+                        return Ok(());
                     }
-                },
-                pancurses::Input::Character('\t') => { // Enter
+                }
+                pancurses::Input::Character('\t') => {
+                    // Enter
                     if self.editing_source {
                         match self.save_new_source() {
                             Ok(_) => {
                                 self.editing_source = !self.editing_source;
-                            },
+                            }
                             Err(error) => {
                                 self.show_source_code_error(error);
-                            },
+                            }
                         }
                     } else {
                         self.editing_source = !self.editing_source;
                     }
                     continue;
-                },
-                pancurses::Input::KeyResize => { // Window resize
+                }
+                pancurses::Input::KeyResize => {
+                    // Window resize
                     Self::exit();
-                    return Err(Error { error_type: UserError , error_message: "Cannot resize window while running".to_string() })
-                },
+                    return Err(Error {
+                        error_type: UserError,
+                        error_message: "Cannot resize window while running".to_string(),
+                    });
+                }
                 _ => {}
             }
 
             // Cell selection
             if !self.editing_source {
                 match key {
-                    pancurses::Input::KeyUp => { // Arrow keys
+                    pancurses::Input::KeyUp => {
+                        // Arrow keys
                         if !self.editing_source && self.cursor_position.1 > 0 {
                             self.cursor_position.1 -= 1;
                             self.update_selected_cell();
                         };
-                    },
+                    }
                     pancurses::Input::KeyRight => {
-                        if !self.editing_source && self.cursor_position.0 < self.grid_size.0 as i32 - 1 {
+                        if !self.editing_source
+                            && self.cursor_position.0 < self.grid_size.0 as i32 - 1
+                        {
                             self.cursor_position.0 += 1;
                             self.update_selected_cell();
                         };
-                    },
+                    }
                     pancurses::Input::KeyDown => {
-                        if !self.editing_source && self.cursor_position.1 < self.grid_size.1 as i32 - 1 {
+                        if !self.editing_source
+                            && self.cursor_position.1 < self.grid_size.1 as i32 - 1
+                        {
                             self.cursor_position.1 += 1;
                             self.update_selected_cell();
                         };
-                    },
+                    }
                     pancurses::Input::KeyLeft => {
                         if !self.editing_source && self.cursor_position.0 > 0 {
                             self.cursor_position.0 -= 1;
                             self.update_selected_cell();
                         };
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -176,10 +209,10 @@ impl CurseController {
                 match key {
                     pancurses::Input::Character('\u{7f}') => {
                         self.new_source_code.pop();
-                    },
+                    }
                     pancurses::Input::Character(c) => {
                         self.new_source_code.push(c);
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -191,18 +224,19 @@ impl CurseController {
     }
 
     fn update_selected_cell(&mut self) {
-        let cell = self.runtime.get_cell(self.cursor_position.0, self.cursor_position.1);
+        let cell = self
+            .runtime
+            .get_cell(self.cursor_position.0, self.cursor_position.1);
         let cell = cell.unwrap(); // Not sure why this would error. Everything should be checked earlier
 
         self.new_source_code = cell.source_code.clone();
     }
 
     fn save_new_source(&mut self) -> Result<(), SourceCodeError> {
-
         // Clean source code
         let mut working_source_code = String::from(self.new_source_code.trim());
         if working_source_code.len() == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         // Check if starts with '='; if not, turn it into a return statement
@@ -221,7 +255,7 @@ impl CurseController {
         let mut tokens = Lexer::lex(&working_source_code);
         if tokens.is_err() {
             if !should_be_primitive {
-                return Err(tokens.err().unwrap())
+                return Err(tokens.err().unwrap());
             }
             tokens = Lexer::lex(&format!("\"{}\"", working_source_code));
         }
@@ -231,41 +265,33 @@ impl CurseController {
         let mut is_primitive = false;
         if tokens.len() == 3 {
             match tokens.get(1).unwrap().token_type {
-                TokenType::Integer
-                | TokenType::Float
-                | TokenType::Boolean
-                | TokenType::String => {
+                TokenType::Integer | TokenType::Float | TokenType::Boolean | TokenType::String => {
                     is_primitive = true
-                },
+                }
                 _ => {}
             };
         }
         // Handle negative numbers
         if tokens.len() == 4 {
             match tokens.get(2).unwrap().token_type {
-                TokenType::Negation => {
-                    match tokens.get(1).unwrap().token_type {
-                        TokenType::Integer
-                        | TokenType::Float => {
-                            is_primitive = true
-                        },
-                        _ => {}
-                    }
+                TokenType::Negation => match tokens.get(1).unwrap().token_type {
+                    TokenType::Integer | TokenType::Float => is_primitive = true,
+                    _ => {}
                 },
                 _ => {}
             };
         }
         // Cast to string
-        if should_be_primitive && !is_primitive  {
+        if should_be_primitive && !is_primitive {
             // Trim the artificial statement stuff
-            working_source_code = working_source_code[7..working_source_code.len()-1].to_string();
+            working_source_code = working_source_code[7..working_source_code.len() - 1].to_string();
             tokens = Lexer::lex(&format!("return \"{}\";", working_source_code)).unwrap();
         }
 
         // Check code
         let code = Parser::parse_code(tokens);
         if code.is_err() {
-            return Err(code.err().unwrap())
+            return Err(code.err().unwrap());
         }
         let code = code.unwrap();
 
@@ -273,24 +299,42 @@ impl CurseController {
         let primitive = CellContext::evaluate_with_context(&self.runtime, &code);
         if primitive.is_err() {
             let message = primitive.err().unwrap();
-            return Err(SourceCodeError { location: vec![0], error_message: format!("Expression failed to evaluate: {}", message) })
+            return Err(SourceCodeError {
+                location: vec![0],
+                error_message: format!("Expression failed to evaluate: {}", message),
+            });
         }
         let primative = Box::new(primitive.unwrap());
 
         // Create cells
-        let backup_cell = *self.runtime.get_cell(self.cursor_position.0, self.cursor_position.1).unwrap(); // I trust this
-        let cell = Cell { source_code: self.new_source_code.clone(), code: Box::new(code), primative: primative.clone() };
+        let backup_cell = *self
+            .runtime
+            .get_cell(self.cursor_position.0, self.cursor_position.1)
+            .unwrap(); // I trust this
+        let cell = Cell {
+            source_code: self.new_source_code.clone(),
+            code: Box::new(code),
+            primative: primative.clone(),
+        };
 
         // This should not error because the parameters already are validated
-        self.runtime.set_cell(self.cursor_position.0, self.cursor_position.1, &cell).unwrap();
+        self.runtime
+            .set_cell(self.cursor_position.0, self.cursor_position.1, &cell)
+            .unwrap();
 
         // Check the rest of the cells for conflicts
         match self.update_cell_primitives() {
-            Ok(_) => {},
-            Err(error) => { // Revert to previous
-                self.runtime.set_cell(self.cursor_position.0, self.cursor_position.1, &backup_cell).unwrap();
-                return Err(SourceCodeError { location: vec![0], error_message: error })
-            },
+            Ok(_) => {}
+            Err(error) => {
+                // Revert to previous
+                self.runtime
+                    .set_cell(self.cursor_position.0, self.cursor_position.1, &backup_cell)
+                    .unwrap();
+                return Err(SourceCodeError {
+                    location: vec![0],
+                    error_message: error,
+                });
+            }
         }
 
         // Reset error messages and such
@@ -307,7 +351,12 @@ impl CurseController {
 
                 let evaluation = CellContext::evaluate_with_context(&self.runtime, &cell.code);
                 if evaluation.is_err() {
-                    return Err(format!("Error with cell {}, {}: {}", x, y, evaluation.err().unwrap()))
+                    return Err(format!(
+                        "Error with cell {}, {}: {}",
+                        x,
+                        y,
+                        evaluation.err().unwrap()
+                    ));
                 }
                 cell.primative = Box::new(evaluation.unwrap());
                 self.runtime.set_cell(x as i32, y as i32, &cell).unwrap(); // Again, shouldn't error
@@ -340,17 +389,25 @@ impl CurseController {
     fn render_source_code(&self) {
         let lines = self.new_source_code.lines();
         for (i, line) in lines.enumerate() {
-            self.source_code_window.mvaddstr(1 + i as i32, 1, format!(" {}", line));
+            self.source_code_window
+                .mvaddstr(1 + i as i32, 1, format!(" {}", line));
         }
     }
 
     fn render_feedback(&self) {
-        if FEEDBACK_WINDOW != 6 {panic!("Programming is hard. FEEDBACK_WINDOW is expected to be 6.")};
+        if FEEDBACK_WINDOW != 6 {
+            panic!("Programming is hard. FEEDBACK_WINDOW is expected to be 6.")
+        };
 
-        let current_cell_value = self.runtime.get_cell(self.cursor_position.0, self.cursor_position.1).unwrap().primative;
+        let current_cell_value = self
+            .runtime
+            .get_cell(self.cursor_position.0, self.cursor_position.1)
+            .unwrap()
+            .primative;
         let current_cell_value = current_cell_value.serialize().unwrap();
 
-        self.feedback_window.mvaddstr(1, 2, format!("Current cell value: {}", current_cell_value));
+        self.feedback_window
+            .mvaddstr(1, 2, format!("Current cell value: {}", current_cell_value));
         self.feedback_window.mvaddstr(2, 2, self.feedback.0.clone());
         self.feedback_window.mvaddstr(3, 2, self.feedback.1.clone());
         self.feedback_window.mvaddstr(4, 2, self.feedback.2.clone());
@@ -367,11 +424,15 @@ impl CurseController {
     fn show_source_code_error(&mut self, error: SourceCodeError) {
         let working_source_code = String::from(self.new_source_code.trim());
         let is_expression = working_source_code.starts_with('=');
-        let working_indices = if is_expression {error.location.iter().map(|&x| x + 1).collect::<Vec<_>>()} else {error.location};
+        let working_indices = if is_expression {
+            error.location.iter().map(|&x| x + 1).collect::<Vec<_>>()
+        } else {
+            error.location
+        };
 
         let mut arrows = String::from("");
         for i in 0..self.new_source_code.len() {
-            let index = i + if is_expression {1} else {0};
+            let index = i + if is_expression { 1 } else { 0 };
             if working_indices.contains(&index) {
                 arrows.push('^');
             } else {
@@ -408,26 +469,31 @@ impl CurseController {
         window.mvaddch(0, 0, ACS_ULCORNER());
         window.mvaddch(0, window.get_max_x() - 1, ACS_URCORNER());
         window.mvaddch(window.get_max_y() - 1, 0, ACS_LLCORNER());
-        window.mvaddch(window.get_max_y() - 1, window.get_max_x() - 1, ACS_LRCORNER());
+        window.mvaddch(
+            window.get_max_y() - 1,
+            window.get_max_x() - 1,
+            ACS_LRCORNER(),
+        );
     }
 
     fn add_cell_text(&self, x: i32, y: i32, text: String) {
         self.clear_cell(x, y);
-        
+
         let actual_x = (x + 1) * GAP_SIZE;
         let actual_y = (y + 1) * 2;
 
-        self.grid_window.mvaddnstr(actual_y, actual_x, text, GAP_SIZE - 1);
+        self.grid_window
+            .mvaddnstr(actual_y, actual_x, text, GAP_SIZE - 1);
     }
 
     fn add_centered_cell_text(&self, x: i32, y: i32, text: String) {
-        
         let actual_x = (x + 1) * GAP_SIZE;
         let actual_y = (y + 1) * 2;
 
         let actual_str = format!("{:^gap$}", text, gap = (GAP_SIZE - 1) as usize);
 
-        self.grid_window.mvaddnstr(actual_y, actual_x, actual_str, GAP_SIZE - 1);
+        self.grid_window
+            .mvaddnstr(actual_y, actual_x, actual_str, GAP_SIZE - 1);
     }
 
     fn clear_cell(&self, x: i32, y: i32) {
@@ -436,9 +502,15 @@ impl CurseController {
 
     fn highlight_source_box(&self) {
         self.source_code_window.mvaddch(0, 0, 'X');
-        self.source_code_window.mvaddch(self.source_code_window.get_max_y() - 1, 0, 'X');
-        self.source_code_window.mvaddch(self.source_code_window.get_max_y() - 1, self.source_code_window.get_max_x() - 1, 'X');
-        self.source_code_window.mvaddch(0, self.source_code_window.get_max_x() - 1, 'X');
+        self.source_code_window
+            .mvaddch(self.source_code_window.get_max_y() - 1, 0, 'X');
+        self.source_code_window.mvaddch(
+            self.source_code_window.get_max_y() - 1,
+            self.source_code_window.get_max_x() - 1,
+            'X',
+        );
+        self.source_code_window
+            .mvaddch(0, self.source_code_window.get_max_x() - 1, 'X');
     }
 
     fn highlight_cell(&self, x: i32, y: i32) {
@@ -446,16 +518,21 @@ impl CurseController {
         let left_corner_y = (y + 1) * 2 - 1;
 
         self.grid_window.mvaddch(left_corner_y, left_corner_x, 'X');
-        self.grid_window.mvaddch(left_corner_y + 2, left_corner_x, 'X');
-        self.grid_window.mvaddch(left_corner_y, left_corner_x + GAP_SIZE, 'X');
-        self.grid_window.mvaddch(left_corner_y + 2, left_corner_x + GAP_SIZE, 'X');
+        self.grid_window
+            .mvaddch(left_corner_y + 2, left_corner_x, 'X');
+        self.grid_window
+            .mvaddch(left_corner_y, left_corner_x + GAP_SIZE, 'X');
+        self.grid_window
+            .mvaddch(left_corner_y + 2, left_corner_x + GAP_SIZE, 'X');
     }
 
     fn create_grid(&self) {
         let grid_width = self.grid_window.get_max_x() - (self.grid_window.get_max_x() % GAP_SIZE);
-        
-        for x in 0..(grid_width) { // Width
-            for y in 0..self.grid_window.get_max_y() { // Height
+
+        for x in 0..(grid_width) {
+            // Width
+            for y in 0..self.grid_window.get_max_y() {
+                // Height
                 if y % 2 == 1 {
                     if x % GAP_SIZE == GAP_SIZE - 1 {
                         self.grid_window.mvaddch(y, x, ACS_PLUS()); // Intersection

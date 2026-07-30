@@ -1,7 +1,8 @@
-
-
+use crate::{
+    errors::SourceCodeError,
+    token::{Token, TokenType},
+};
 use std::collections::HashMap;
-use crate::{errors::SourceCodeError, token::{Token, TokenType}};
 
 pub struct Lexer {
     chars: Vec<char>,
@@ -13,14 +14,19 @@ pub struct Lexer {
 }
 
 impl Lexer {
-
     fn new(source_code: String) -> Self {
         let chars: Vec<char> = source_code.to_lowercase().chars().collect();
         let current_index: usize = 0;
         let tokens: Vec<Token> = Vec::new();
         let current_token_start: usize = 0;
         let current_token_source: Vec<char> = Vec::new();
-        Self {chars, current_index, tokens, current_token_start, current_token_source}
+        Self {
+            chars,
+            current_index,
+            tokens,
+            current_token_start,
+            current_token_source,
+        }
     }
 
     fn has_next(&self) -> bool {
@@ -29,7 +35,7 @@ impl Lexer {
 
     fn peek(&self) -> Result<char, String> {
         if self.has_next() {
-            return Ok(self.chars[self.current_index])
+            return Ok(self.chars[self.current_index]);
         }
         Err("Cannot peek out of bounds".to_string())
     }
@@ -37,18 +43,19 @@ impl Lexer {
     fn peek_equals(&self, other: String) -> Result<bool, String> {
         for (i, c) in other.chars().enumerate() {
             if self.current_index + i >= self.chars.len() {
-                return Err("Cannot peek out of bounds".to_string())
+                return Err("Cannot peek out of bounds".to_string());
             }
             if self.chars[self.current_index + i] != c {
-                return Ok(false)
+                return Ok(false);
             }
         }
-        return Ok(true)
+        return Ok(true);
     }
 
     fn capture(&mut self) {
         self.current_index += 1;
-        self.current_token_source.push(self.chars[self.current_index - 1]);
+        self.current_token_source
+            .push(self.chars[self.current_index - 1]);
     }
 
     fn capture_n(&mut self, n: usize) {
@@ -63,22 +70,18 @@ impl Lexer {
     }
 
     fn save_token(&mut self, token_type: TokenType) {
-        self.tokens.push(
-            Token::new(
-                token_type, 
-                self.current_token_source.iter().collect(), 
-                self.current_token_start, 
-                self.current_index
-            )
-        );
+        self.tokens.push(Token::new(
+            token_type,
+            self.current_token_source.iter().collect(),
+            self.current_token_start,
+            self.current_index,
+        ));
         self.current_token_start = self.current_index;
         self.current_token_source.clear();
     }
 
     pub fn lex(source_code: &String) -> Result<Vec<Token>, SourceCodeError> {
-
         let static_tokens: HashMap<String, TokenType> = HashMap::from([
-
             // Parentheses
             ("(".to_string(), TokenType::OpeningParenthesis),
             (")".to_string(), TokenType::ClosingParenthesis),
@@ -86,7 +89,6 @@ impl Lexer {
             ("]".to_string(), TokenType::ClosingSquareBracket),
             ("#".to_string(), TokenType::PoundSign),
             (",".to_string(), TokenType::Comma),
-
             // Keywords
             ("+".to_string(), TokenType::Addition),
             ("-".to_string(), TokenType::Subtraction), // This doubles as negation
@@ -115,7 +117,6 @@ impl Lexer {
             ("min".to_string(), TokenType::Min),
             ("mean".to_string(), TokenType::Mean),
             ("sum".to_string(), TokenType::Sum),
-
             // Statement stuff
             ("{".to_string(), TokenType::StartBlock),
             ("}".to_string(), TokenType::EndBlock),
@@ -127,7 +128,6 @@ impl Lexer {
             ("in".to_string(), TokenType::In),
             ("to".to_string(), TokenType::Range),
             ("return".to_string(), TokenType::Return),
-
             // Edge case for boolean primatives
             ("true".to_string(), TokenType::Boolean),
             ("false".to_string(), TokenType::Boolean),
@@ -136,8 +136,7 @@ impl Lexer {
         let mut lexer = Lexer::new(source_code.clone());
 
         while lexer.has_next() {
-
-            // The only thing whitespace does is break apart tokens. 
+            // The only thing whitespace does is break apart tokens.
             if lexer.peek().unwrap().is_whitespace() {
                 lexer.skip(1);
                 continue;
@@ -198,7 +197,10 @@ impl Lexer {
                     lexer.capture();
                     lexer.save_token(TokenType::String);
                 } else {
-                    return Err(SourceCodeError { location: vec![lexer.current_index], error_message: String::from("Unknown symbol") })
+                    return Err(SourceCodeError {
+                        location: vec![lexer.current_index],
+                        error_message: String::from("Unknown symbol"),
+                    });
                 }
                 continue;
             }
@@ -217,7 +219,10 @@ impl Lexer {
             }
 
             // Default to capturing any garbage
-            return Err(SourceCodeError { location: vec![lexer.current_index], error_message: String::from("Unknown symbol") })
+            return Err(SourceCodeError {
+                location: vec![lexer.current_index],
+                error_message: String::from("Unknown symbol"),
+            });
         }
         Ok(lexer.tokens)
     }
