@@ -160,3 +160,125 @@ impl Lexer {
         Ok(lexer.tokens)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn types(source: &str) -> Vec<TokenType> {
+        Lexer::lex(&source.to_string())
+            .unwrap()
+            .into_iter()
+            .map(|t| t.token_type)
+            .collect()
+    }
+
+    #[test]
+    fn lexes_integer() {
+        let tokens = Lexer::lex(&"123".to_string()).unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::Number);
+        assert_eq!(tokens[0].source, "123");
+    }
+
+    #[test]
+    fn lexes_decimal() {
+        let tokens = Lexer::lex(&"3.14".to_string()).unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::Number);
+        assert_eq!(tokens[0].source, "3.14");
+    }
+
+    #[test]
+    fn lexes_symbols() {
+        assert_eq!(
+            types("()[]#,"),
+            vec![
+                TokenType::OpeningParenthesis,
+                TokenType::ClosingParenthesis,
+                TokenType::OpeningSquareBracket,
+                TokenType::ClosingSquareBracket,
+                TokenType::PoundSign,
+                TokenType::Comma,
+            ]
+        );
+    }
+
+    #[test]
+    fn lexes_single_char_operators() {
+        assert_eq!(
+            types("+-/%"),
+            vec![
+                TokenType::Addition,
+                TokenType::Subtraction,
+                TokenType::Division,
+                TokenType::Modulo,
+            ]
+        );
+    }
+
+    #[test]
+    fn lexes_multiplication_as_single_star() {
+        assert_eq!(
+            types("2*3"),
+            vec![
+                TokenType::Number,
+                TokenType::Multiplication,
+                TokenType::Number
+            ]
+        );
+    }
+
+    #[test]
+    fn lexes_double_star_as_exponentiation_not_two_multiplications() {
+        let tokens = Lexer::lex(&"2**3".to_string()).unwrap();
+        assert_eq!(
+            tokens
+                .iter()
+                .map(|t| t.token_type.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                TokenType::Number,
+                TokenType::Exponentiation,
+                TokenType::Number
+            ]
+        );
+        assert_eq!(tokens[1].source, "**");
+    }
+
+    #[test]
+    fn lexes_keywords_case_insensitively() {
+        assert_eq!(types("MAX"), vec![TokenType::Max]);
+        assert_eq!(types("Min"), vec![TokenType::Min]);
+        assert_eq!(types("mean"), vec![TokenType::Mean]);
+        assert_eq!(types("SUM"), vec![TokenType::Sum]);
+    }
+
+    #[test]
+    fn skips_whitespace_between_tokens() {
+        assert_eq!(
+            types("1   +\t2\n"),
+            vec![TokenType::Number, TokenType::Addition, TokenType::Number]
+        );
+    }
+
+    #[test]
+    fn tracks_token_source_positions() {
+        let tokens = Lexer::lex(&"12+3".to_string()).unwrap();
+        assert_eq!((tokens[0].start_index, tokens[0].end_index), (0, 2));
+        assert_eq!((tokens[1].start_index, tokens[1].end_index), (2, 3));
+        assert_eq!((tokens[2].start_index, tokens[2].end_index), (3, 4));
+    }
+
+    #[test]
+    fn errors_on_unknown_symbol() {
+        let result = Lexer::lex(&"1 @ 2".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn empty_source_produces_no_tokens() {
+        let tokens = Lexer::lex(&"".to_string()).unwrap();
+        assert!(tokens.is_empty());
+    }
+}

@@ -827,3 +827,249 @@ fn float_equals(a: f64, b: f64) -> bool {
 
     (a - b).abs() < FLOAT_COMPARISON_TOLERANCE
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::grid::Cell;
+
+    fn num(value: f64) -> Expression {
+        Expression::Number {
+            source_token: Token::default(),
+            value,
+        }
+    }
+
+    fn cell_address(x: f64, y: f64) -> Expression {
+        Expression::CellAddress {
+            source_token: Token::default(),
+            x_value: Box::new(num(x)),
+            y_value: Box::new(num(y)),
+        }
+    }
+
+    fn eval(expression: &Expression, runtime: &Runtime) -> Result<Expression, String> {
+        let mut context = CellContext::default();
+        expression.evaluate(runtime, &mut context)
+    }
+
+    fn value_of(expression: &Expression, runtime: &Runtime) -> f64 {
+        match eval(expression, runtime).unwrap() {
+            Expression::Number { value, .. } => value,
+            other => panic!("expected a number, got {:?}", other),
+        }
+    }
+
+    fn set_number(runtime: &mut Runtime, x: i32, y: i32, value: f64) {
+        let cell = Cell {
+            source_code: String::new(),
+            code: Box::new(num(value)),
+            primative: Box::new(num(value)),
+        };
+        runtime.set_cell(x, y, &cell).unwrap();
+    }
+
+    fn set_string(runtime: &mut Runtime, x: i32, y: i32, value: &str) {
+        let string_expr = Expression::String {
+            source_token: Token::default(),
+            value: value.to_string(),
+        };
+        let cell = Cell {
+            source_code: String::new(),
+            code: Box::new(string_expr.clone()),
+            primative: Box::new(string_expr),
+        };
+        runtime.set_cell(x, y, &cell).unwrap();
+    }
+
+    #[test]
+    fn evaluates_arithmetic() {
+        let runtime = Runtime::new((1, 1));
+
+        let addition = Expression::Addition {
+            source_token: Token::default(),
+            left_expression: Box::new(num(2.0)),
+            right_expression: Box::new(num(3.0)),
+        };
+        assert_eq!(value_of(&addition, &runtime), 5.0);
+
+        let subtraction = Expression::Subtraction {
+            source_token: Token::default(),
+            left_expression: Box::new(num(2.0)),
+            right_expression: Box::new(num(3.0)),
+        };
+        assert_eq!(value_of(&subtraction, &runtime), -1.0);
+
+        let multiplication = Expression::Multiplication {
+            source_token: Token::default(),
+            left_expression: Box::new(num(2.0)),
+            right_expression: Box::new(num(3.0)),
+        };
+        assert_eq!(value_of(&multiplication, &runtime), 6.0);
+
+        let division = Expression::Division {
+            source_token: Token::default(),
+            left_expression: Box::new(num(6.0)),
+            right_expression: Box::new(num(3.0)),
+        };
+        assert_eq!(value_of(&division, &runtime), 2.0);
+
+        let modulo = Expression::Modulo {
+            source_token: Token::default(),
+            left_expression: Box::new(num(7.0)),
+            right_expression: Box::new(num(3.0)),
+        };
+        assert_eq!(value_of(&modulo, &runtime), 1.0);
+
+        let exponentiation = Expression::Exponentiation {
+            source_token: Token::default(),
+            left_expression: Box::new(num(2.0)),
+            right_expression: Box::new(num(3.0)),
+        };
+        assert_eq!(value_of(&exponentiation, &runtime), 8.0);
+
+        let negation = Expression::Negation {
+            source_token: Token::default(),
+            expression: Box::new(num(4.0)),
+        };
+        assert_eq!(value_of(&negation, &runtime), -4.0);
+    }
+
+    #[test]
+    fn division_by_zero_yields_infinity_rather_than_erroring() {
+        let runtime = Runtime::new((1, 1));
+        let division = Expression::Division {
+            source_token: Token::default(),
+            left_expression: Box::new(num(1.0)),
+            right_expression: Box::new(num(0.0)),
+        };
+        assert!(value_of(&division, &runtime).is_infinite());
+    }
+
+    #[test]
+    fn arithmetic_on_non_numbers_errors() {
+        let runtime = Runtime::new((1, 1));
+        let addition = Expression::Addition {
+            source_token: Token::default(),
+            left_expression: Box::new(num(1.0)),
+            right_expression: Box::new(Expression::String {
+                source_token: Token::default(),
+                value: "oops".to_string(),
+            }),
+        };
+        assert!(eval(&addition, &runtime).is_err());
+    }
+
+    #[test]
+    fn rvalue_reads_referenced_cell() {
+        let mut runtime = Runtime::new((3, 3));
+        set_number(&mut runtime, 1, 2, 42.0);
+
+        let rvalue = Expression::RValue {
+            source_token: Token::default(),
+            cell_address: Box::new(cell_address(1.0, 2.0)),
+        };
+        assert_eq!(value_of(&rvalue, &runtime), 42.0);
+    }
+
+    #[test]
+    fn lvalue_evaluates_to_its_own_cell_address() {
+        let runtime = Runtime::new((3, 3));
+        let lvalue = Expression::LValue {
+            source_token: Token::default(),
+            cell_address: Box::new(cell_address(1.0, 2.0)),
+        };
+        match eval(&lvalue, &runtime).unwrap() {
+            Expression::CellAddress {
+                x_value, y_value, ..
+            } => {
+                assert_eq!(value_of(&x_value, &runtime), 1.0);
+                assert_eq!(value_of(&y_value, &runtime), 2.0);
+            }
+            other => panic!("expected a cell address, got {:?}", other),
+        }
+    }
+
+    fn range_functions_setup() -> Runtime {
+        let mut runtime = Runtime::new((2, 2));
+        set_number(&mut runtime, 0, 0, 1.0);
+        set_number(&mut runtime, 1, 0, 2.0);
+        set_number(&mut runtime, 0, 1, 3.0);
+        set_number(&mut runtime, 1, 1, 4.0);
+        runtime
+    }
+
+    #[test]
+    fn sum_adds_every_cell_in_the_range() {
+        let runtime = range_functions_setup();
+        let sum = Expression::Sum {
+            source_token: Token::default(),
+            first_address: Box::new(cell_address(0.0, 0.0)),
+            last_address: Box::new(cell_address(1.0, 1.0)),
+        };
+        assert_eq!(value_of(&sum, &runtime), 10.0);
+    }
+
+    #[test]
+    fn mean_averages_every_cell_in_the_range() {
+        let runtime = range_functions_setup();
+        let mean = Expression::Mean {
+            source_token: Token::default(),
+            first_address: Box::new(cell_address(0.0, 0.0)),
+            last_address: Box::new(cell_address(1.0, 1.0)),
+        };
+        assert_eq!(value_of(&mean, &runtime), 2.5);
+    }
+
+    #[test]
+    fn max_finds_the_largest_value_in_the_range() {
+        let runtime = range_functions_setup();
+        let max = Expression::Max {
+            source_token: Token::default(),
+            first_address: Box::new(cell_address(0.0, 0.0)),
+            last_address: Box::new(cell_address(1.0, 1.0)),
+        };
+        assert_eq!(value_of(&max, &runtime), 4.0);
+    }
+
+    #[test]
+    fn min_finds_the_smallest_value_in_the_range() {
+        let runtime = range_functions_setup();
+        let min = Expression::Min {
+            source_token: Token::default(),
+            first_address: Box::new(cell_address(0.0, 0.0)),
+            last_address: Box::new(cell_address(1.0, 1.0)),
+        };
+        assert_eq!(value_of(&min, &runtime), 1.0);
+    }
+
+    #[test]
+    fn range_functions_error_on_non_numeric_cell() {
+        let mut runtime = Runtime::new((2, 2));
+        set_number(&mut runtime, 0, 0, 1.0);
+        set_string(&mut runtime, 1, 0, "not a number");
+        set_number(&mut runtime, 0, 1, 3.0);
+        set_number(&mut runtime, 1, 1, 4.0);
+
+        let sum = Expression::Sum {
+            source_token: Token::default(),
+            first_address: Box::new(cell_address(0.0, 0.0)),
+            last_address: Box::new(cell_address(1.0, 1.0)),
+        };
+        assert!(eval(&sum, &runtime).is_err());
+    }
+
+    #[test]
+    fn serialize_renders_nested_expressions() {
+        let expression = Expression::Addition {
+            source_token: Token::default(),
+            left_expression: Box::new(num(1.0)),
+            right_expression: Box::new(Expression::Multiplication {
+                source_token: Token::default(),
+                left_expression: Box::new(num(2.0)),
+                right_expression: Box::new(num(3.0)),
+            }),
+        };
+        assert_eq!(expression.serialize().unwrap(), "(1 + (2 * 3))");
+    }
+}

@@ -255,3 +255,96 @@ impl Parser {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+
+    fn parse(source: &str) -> Result<Expression, SourceCodeError> {
+        let tokens = Lexer::lex(&source.to_string()).unwrap();
+        Parser::parse_code(tokens)
+    }
+
+    fn serialized(source: &str) -> String {
+        parse(source).unwrap().serialize().unwrap()
+    }
+
+    #[test]
+    fn parses_number() {
+        assert_eq!(serialized("42"), "42");
+    }
+
+    #[test]
+    fn parses_addition_and_subtraction_left_associatively() {
+        assert_eq!(serialized("10-3-2"), "((10 - 3) - 2)");
+    }
+
+    #[test]
+    fn multiplication_binds_tighter_than_addition() {
+        assert_eq!(serialized("2+3*4"), "(2 + (3 * 4))");
+    }
+
+    #[test]
+    fn exponentiation_is_right_associative() {
+        assert_eq!(serialized("2**3**2"), "(2 ^ (3 ^ 2))");
+    }
+
+    #[test]
+    fn exponentiation_binds_tighter_than_multiplication() {
+        assert_eq!(serialized("2*3**2"), "(2 * (3 ^ 2))");
+    }
+
+    #[test]
+    fn parentheses_override_precedence() {
+        assert_eq!(serialized("(2+3)*4"), "((2 + 3) * 4)");
+    }
+
+    #[test]
+    fn parses_unary_negation() {
+        assert_eq!(serialized("-5"), "-5");
+    }
+
+    #[test]
+    fn negation_wraps_the_whole_exponent_expression() {
+        assert_eq!(serialized("-2**2"), "-(2 ^ 2)");
+    }
+
+    #[test]
+    fn parses_lvalue_cell_address() {
+        assert_eq!(serialized("[1,2]"), "[1, 2]");
+    }
+
+    #[test]
+    fn parses_rvalue_cell_address() {
+        assert_eq!(serialized("#[1,2]"), "#[1, 2]");
+    }
+
+    #[test]
+    fn parses_aggregate_functions() {
+        assert_eq!(serialized("sum([0,0],[1,1])"), "Sum([0, 0], [1, 1])");
+        assert_eq!(serialized("max([0,0],[1,1])"), "Max([0, 0], [1, 1])");
+        assert_eq!(serialized("min([0,0],[1,1])"), "Min([0, 0], [1, 1])");
+        assert_eq!(serialized("mean([0,0],[1,1])"), "Mean([0, 0], [1, 1])");
+    }
+
+    #[test]
+    fn errors_on_empty_input() {
+        assert!(parse("").is_err());
+    }
+
+    #[test]
+    fn errors_on_trailing_input() {
+        assert!(parse("1 2").is_err());
+    }
+
+    #[test]
+    fn errors_on_unclosed_parenthesis() {
+        assert!(parse("(1+2").is_err());
+    }
+
+    #[test]
+    fn errors_on_missing_comma_in_function_call() {
+        assert!(parse("sum([0,0] [1,1])").is_err());
+    }
+}
