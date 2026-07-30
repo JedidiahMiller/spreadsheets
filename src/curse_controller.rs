@@ -1,5 +1,5 @@
 use pancurses::{
-    ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS, ACS_ULCORNER, ACS_URCORNER, ACS_VLINE,
+    A_BOLD, ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS, ACS_ULCORNER, ACS_URCORNER, ACS_VLINE,
 };
 use pancurses::{Window, curs_set, endwin, initscr, noecho};
 
@@ -19,6 +19,27 @@ const SOURCE_CODE_WINDOW: i32 = 8;
 const MODAL_HEIGHT: i32 = 7;
 const TERMINAL_MIN_WIDTH: i32 = 24;
 const TERMINAL_MIN_HEIGHT: i32 = 19;
+
+const TAGLINE: &str = "The best Vim motions TUI spreadsheet ever created";
+const CONTINUE_PROMPT: &str = "Press Enter to continue";
+
+// "SPREADSHEETS" banner.
+const BANNER: [&str; 8] = [
+    " .d8888b.  8888888b.  8888888b.  8888888888        d8888 8888888b.   .d8888b.  888    888 8888888888 8888888888 88888888888 .d8888b.  ",
+    "d88P  Y88b 888   Y88b 888   Y88b 888              d88888 888  \"Y88b d88P  Y88b 888    888 888        888            888    d88P  Y88b ",
+    "Y88b.      888    888 888    888 888             d88P888 888    888 Y88b.      888    888 888        888            888    Y88b.      ",
+    " \"Y888b.   888   d88P 888   d88P 8888888        d88P 888 888    888  \"Y888b.   8888888888 8888888    8888888        888     \"Y888b.   ",
+    "    \"Y88b. 8888888P\"  8888888P\"  888           d88P  888 888    888     \"Y88b. 888    888 888        888            888        \"Y88b. ",
+    "      \"888 888        888 T88b   888          d88P   888 888    888       \"888 888    888 888        888            888          \"888 ",
+    "Y88b  d88P 888        888  T88b  888         d8888888888 888  .d88P Y88b  d88P 888    888 888        888            888    Y88b  d88P ",
+    " \"Y8888P\"  888        888   T88b 8888888888 d88P     888 8888888P\"   \"Y8888P\"  888    888 8888888888 8888888888     888     \"Y8888P\"  ",
+];
+const FALLBACK_TITLE: &str = "SPREADSHEETS";
+
+fn add_centered_line(window: &Window, y: i32, max_x: i32, text: &str) {
+    let x = ((max_x - text.len() as i32) / 2).max(0);
+    window.mvaddstr(y, x, text);
+}
 
 enum OperationMode {
     Normal,
@@ -119,6 +140,58 @@ impl CurseController {
             new_source_code,
             last_error,
         })
+    }
+
+    pub fn show_start_screen(&self) -> Result<(), Error> {
+        let window = &self.master_window;
+        window.clear();
+
+        let (max_y, max_x) = window.get_max_yx();
+
+        let banner_width = BANNER.iter().map(|line| line.len()).max().unwrap_or(0) as i32;
+        let use_banner = banner_width <= max_x;
+        let banner_height = if use_banner { BANNER.len() as i32 } else { 1 };
+
+        // banner + gap + tagline + larger gap + prompt
+        let block_height = banner_height + 9;
+        let mut y = ((max_y - block_height) / 2).max(0);
+
+        if use_banner {
+            for line in BANNER.iter() {
+                add_centered_line(window, y, max_x, line);
+                y += 1;
+            }
+        } else {
+            window.attron(A_BOLD);
+            add_centered_line(window, y, max_x, FALLBACK_TITLE);
+            window.attroff(A_BOLD);
+            y += 1;
+        }
+
+        y += 2;
+        add_centered_line(window, y, max_x, TAGLINE);
+        y += 5;
+        add_centered_line(window, y, max_x, CONTINUE_PROMPT);
+
+        window.refresh();
+
+        loop {
+            match window.getch() {
+                // Enter key
+                Some(pancurses::Input::Character('\n')) => break,
+                // Window resized
+                Some(pancurses::Input::KeyResize) => {
+                    Self::exit();
+                    return Err(Error {
+                        error_type: UserError,
+                        error_message: "Cannot resize window while starting up".to_string(),
+                    });
+                }
+                _ => continue,
+            }
+        }
+
+        Ok(())
     }
 
     pub fn start_event_loop(&mut self) -> Result<(), Error> {
