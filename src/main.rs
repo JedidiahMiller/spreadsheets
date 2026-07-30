@@ -9,13 +9,15 @@ mod runtime;
 mod statements;
 mod token;
 
-use std::io::{stdin, stdout, Write};
+use std::io::{Write, stdin, stdout};
 
 use curse_controller::CurseController;
 
 fn main() {
     println!("Congratulations, you are launching the best terminal spreadsheet ever created!");
-    print!("WARNING: Do not resize the window while using. You will exit using q. (Hit enter to continue)");
+    print!(
+        "WARNING: Do not resize the window while using. You will exit using q. (Hit enter to continue)"
+    );
     stdout().flush().unwrap();
 
     let mut garbage = String::new();

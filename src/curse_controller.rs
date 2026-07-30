@@ -1,7 +1,7 @@
-use pancurses::{curs_set, endwin, initscr, noecho, Window};
 use pancurses::{
     ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS, ACS_ULCORNER, ACS_URCORNER, ACS_VLINE,
 };
+use pancurses::{Window, curs_set, endwin, initscr, noecho};
 
 use crate::cell_context::CellContext;
 use crate::errors::SourceCodeError;
@@ -64,7 +64,7 @@ impl CurseController {
                 return Err(Error {
                     error_type: UnexpectedError,
                     error_message: "Couldn't create source code window".to_string(),
-                })
+                });
             }
         }
 
@@ -76,7 +76,7 @@ impl CurseController {
                 return Err(Error {
                     error_type: UnexpectedError,
                     error_message: "Couldn't create grid window".to_string(),
-                })
+                });
             }
         }
 
@@ -88,7 +88,7 @@ impl CurseController {
                 return Err(Error {
                     error_type: UnexpectedError,
                     error_message: "Couldn't create data window".to_string(),
-                })
+                });
             }
         }
 

@@ -83,7 +83,7 @@ impl Statement {
                     _ => {
                         return EvaluationResult::Error {
                             message: String::from("If statement needs a boolean conditional"),
-                        }
+                        };
                     }
                 }
             }
@@ -105,7 +105,7 @@ impl Statement {
                         _ => {
                             return EvaluationResult::Error {
                                 message: String::from("Range start expression must be an integer"),
-                            }
+                            };
                         }
                     },
                     Err(message) => return EvaluationResult::Error { message },
@@ -123,7 +123,7 @@ impl Statement {
                         _ => {
                             return EvaluationResult::Error {
                                 message: String::from("Range start expression must be an integer"),
-                            }
+                            };
                         }
                     },
                     Err(message) => return EvaluationResult::Error { message },
@@ -156,7 +156,7 @@ impl Statement {
                     Ok(value) => {
                         return EvaluationResult::ReturnValue {
                             expression: Box::new(value),
-                        }
+                        };
                     }
                     Err(message) => return EvaluationResult::Error { message },
                 }

@@ -4,6 +4,6 @@ set -e
 
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
 if [ -n "$files" ]; then
-  rustfmt --edition 2021 $files
+  rustfmt --edition 2024 $files
   git add -- $files
 fi
