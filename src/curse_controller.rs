@@ -7,11 +7,12 @@ use crate::cell_context::CellContext;
 use crate::curse_controller::OperationMode::{Edit, Normal};
 use crate::errors::SourceCodeError;
 use crate::errors::{Error, ErrorType::*};
+use crate::expressions::Expression;
 use crate::grid::Cell;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::runtime::Runtime;
-use crate::token::TokenType;
+use crate::token::Token;
 
 const GAP_SIZE: i32 = 15;
 const SOURCE_CODE_WINDOW: i32 = 8;
@@ -192,6 +193,7 @@ impl CurseController {
                         if let Err(error) = self.save_new_source() {
                             self.last_error = Some(error);
                         }
+                        self.operation_mode = OperationMode::Normal;
                     }
                     pancurses::Input::Character(c) => {
                         self.new_source_code.push(c);
@@ -255,64 +257,23 @@ impl CurseController {
 
     fn save_new_source(&mut self) -> Result<(), SourceCodeError> {
         // Clean source code
-        let mut working_source_code = String::from(self.new_source_code.trim());
+        let working_source_code = String::from(self.new_source_code.trim());
         if working_source_code.len() == 0 {
             return Ok(());
         }
 
-        // Check if starts with '='; if not, turn it into a return statement
-        let mut should_be_primitive = true;
-        if working_source_code.starts_with('=') {
-            working_source_code.remove(0);
-            should_be_primitive = false;
-        }
-
-        // Create tokens
-        // Wrap in a return statement so the parser sees a full program
-        working_source_code = format!("return {};", working_source_code);
-
-        let mut tokens = Lexer::lex(&working_source_code);
-        if tokens.is_err() {
-            if !should_be_primitive {
-                return Err(tokens.err().unwrap());
+        // Cells starting with = hold an expression, everything else is a
+        // plain string literal
+        let code = match working_source_code.strip_prefix('=') {
+            Some(expression_source) => {
+                let tokens = Lexer::lex(&expression_source.to_string())?;
+                Parser::parse_code(tokens)?
             }
-            tokens = Lexer::lex(&format!("\"{}\"", working_source_code));
-        }
-        let mut tokens = tokens.unwrap();
-
-        // Check for primitive, cast to string if it should be primitive but is not
-        let mut is_primitive = false;
-        if tokens.len() == 3 {
-            match tokens.get(1).unwrap().token_type {
-                TokenType::Integer | TokenType::Float | TokenType::Boolean | TokenType::String => {
-                    is_primitive = true
-                }
-                _ => {}
-            };
-        }
-        // Handle negative numbers
-        if tokens.len() == 4 {
-            match tokens.get(2).unwrap().token_type {
-                TokenType::Negation => match tokens.get(1).unwrap().token_type {
-                    TokenType::Integer | TokenType::Float => is_primitive = true,
-                    _ => {}
-                },
-                _ => {}
-            };
-        }
-        // Cast to string
-        if should_be_primitive && !is_primitive {
-            // Trim the artificial statement stuff
-            working_source_code = working_source_code[7..working_source_code.len() - 1].to_string();
-            tokens = Lexer::lex(&format!("return \"{}\";", working_source_code)).unwrap();
-        }
-
-        // Check code
-        let code = Parser::parse_code(tokens);
-        if code.is_err() {
-            return Err(code.err().unwrap());
-        }
-        let code = code.unwrap();
+            None => Expression::String {
+                source_token: Token::default(),
+                value: working_source_code.clone(),
+            },
+        };
 
         // Evaluate primitive
         let primitive = CellContext::evaluate_with_context(&self.runtime, &code);

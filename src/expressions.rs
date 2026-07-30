@@ -1,21 +1,12 @@
 use crate::cell_context::CellContext;
 use crate::runtime::Runtime;
-use crate::statements::EvaluationResult;
 use crate::token::Token;
 
 #[derive(Clone, Debug)]
 pub enum Expression {
-    Integer {
+    Number {
         source_token: Token,
-        value: i32,
-    },
-    Float {
-        source_token: Token,
-        value: f32,
-    },
-    Boolean {
-        source_token: Token,
-        value: bool,
+        value: f64,
     },
     String {
         source_token: Token,
@@ -25,10 +16,6 @@ pub enum Expression {
         source_token: Token,
         x_value: Box<Expression>,
         y_value: Box<Expression>,
-    },
-    Variable {
-        source_token: Token,
-        name: String,
     },
 
     Addition {
@@ -66,21 +53,6 @@ pub enum Expression {
         expression: Box<Expression>,
     },
 
-    And {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    Or {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    Not {
-        source_token: Token,
-        expression: Box<Expression>,
-    },
-
     LValue {
         source_token: Token,
         cell_address: Box<Expression>,
@@ -88,76 +60,6 @@ pub enum Expression {
     RValue {
         source_token: Token,
         cell_address: Box<Expression>,
-    },
-
-    BitwiseAnd {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    BitwiseOr {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    BitwiseNot {
-        source_token: Token,
-        expression: Box<Expression>,
-    },
-    BitwiseXor {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    BitwiseLeftShift {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    BitwiseRightShift {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-
-    Equals {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    NotEquals {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    LessThan {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    LessThanOrEquals {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    GreaterThan {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-    GreaterThanOrEquals {
-        source_token: Token,
-        left_expression: Box<Expression>,
-        right_expression: Box<Expression>,
-    },
-
-    FloatToInt {
-        source_token: Token,
-        expression: Box<Expression>,
-    },
-    IntToFloat {
-        source_token: Token,
-        expression: Box<Expression>,
     },
 
     Max {
@@ -185,21 +87,7 @@ pub enum Expression {
 impl Expression {
     pub fn serialize(&self) -> Result<String, String> {
         match self {
-            Expression::Integer {
-                source_token: _,
-                value,
-            } => Ok(value.to_string()),
-            Expression::Float {
-                source_token: _,
-                value,
-            } => {
-                let mut decimal_string = value.to_string();
-                if !decimal_string.contains('.') {
-                    decimal_string.push_str(&".0");
-                }
-                Ok(decimal_string)
-            }
-            Expression::Boolean {
+            Expression::Number {
                 source_token: _,
                 value,
             } => Ok(value.to_string()),
@@ -216,10 +104,6 @@ impl Expression {
                 x_value.serialize()?,
                 y_value.serialize()?
             )),
-            Expression::Variable {
-                source_token: _,
-                name,
-            } => Ok(String::from(name)),
 
             Expression::Addition {
                 source_token: _,
@@ -280,29 +164,6 @@ impl Expression {
                 expression,
             } => Ok(format!("-{}", expression.serialize()?)),
 
-            Expression::And {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} && {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::Or {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} || {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::Not {
-                source_token: _,
-                expression,
-            } => Ok(format!("!{}", expression.serialize()?)),
-
             Expression::LValue {
                 source_token: _,
                 cell_address,
@@ -311,120 +172,6 @@ impl Expression {
                 source_token: _,
                 cell_address,
             } => Ok(format!("#{}", cell_address.serialize()?)),
-
-            Expression::BitwiseAnd {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} & {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::BitwiseOr {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} | {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::BitwiseNot {
-                source_token: _,
-                expression,
-            } => Ok(format!("~{}", expression.serialize()?)),
-            Expression::BitwiseXor {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} xor {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::BitwiseLeftShift {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} << {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::BitwiseRightShift {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} >> {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-
-            Expression::Equals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} == {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::NotEquals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} != {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::LessThan {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} < {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::LessThanOrEquals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} <= {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::GreaterThan {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} > {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-            Expression::GreaterThanOrEquals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => Ok(format!(
-                "({} >= {})",
-                left_expression.serialize()?,
-                right_expression.serialize()?
-            )),
-
-            Expression::FloatToInt {
-                source_token: _,
-                expression,
-            } => Ok(format!("Int({})", expression.serialize()?)),
-            Expression::IntToFloat {
-                source_token: _,
-                expression,
-            } => Ok(format!("Float({})", expression.serialize()?)),
 
             Expression::Max {
                 source_token: _,
@@ -471,15 +218,7 @@ impl Expression {
         context: &mut CellContext,
     ) -> Result<Expression, String> {
         match self {
-            Expression::Integer {
-                source_token: _,
-                value: _,
-            } => Ok(self.clone()),
-            Expression::Float {
-                source_token: _,
-                value: _,
-            } => Ok(self.clone()),
-            Expression::Boolean {
+            Expression::Number {
                 source_token: _,
                 value: _,
             } => Ok(self.clone()),
@@ -492,16 +231,6 @@ impl Expression {
                 x_value: _,
                 y_value: _,
             } => Ok(self.clone()),
-            Expression::Variable {
-                source_token: _,
-                name,
-            } => {
-                let val = context.get_var(name);
-                if val.is_err() {
-                    return Err(format!("Could not find variable \"{}\"", name));
-                }
-                Ok(val.unwrap())
-            }
 
             Expression::Addition {
                 source_token: _,
@@ -513,54 +242,15 @@ impl Expression {
 
                 match (left_evaluation, right_evaluation) {
                     (
-                        Expression::Float {
+                        Expression::Number {
                             source_token: left_source,
                             value: left_value,
                         },
-                        Expression::Float {
+                        Expression::Number {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value + right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value + right_value as f32,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value as f32 + right_value,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
+                    ) => Ok(Expression::Number {
                         source_token: left_source.merge(right_source),
                         value: left_value + right_value,
                     }),
@@ -577,54 +267,15 @@ impl Expression {
 
                 match (left_evaluation, right_evaluation) {
                     (
-                        Expression::Float {
+                        Expression::Number {
                             source_token: left_source,
                             value: left_value,
                         },
-                        Expression::Float {
+                        Expression::Number {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value - right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value - right_value as f32,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value as f32 - right_value,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
+                    ) => Ok(Expression::Number {
                         source_token: left_source.merge(right_source),
                         value: left_value - right_value,
                     }),
@@ -641,54 +292,15 @@ impl Expression {
 
                 match (left_evaluation, right_evaluation) {
                     (
-                        Expression::Float {
+                        Expression::Number {
                             source_token: left_source,
                             value: left_value,
                         },
-                        Expression::Float {
+                        Expression::Number {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value * right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value * right_value as f32,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value as f32 * right_value,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
+                    ) => Ok(Expression::Number {
                         source_token: left_source.merge(right_source),
                         value: left_value * right_value,
                     }),
@@ -703,60 +315,19 @@ impl Expression {
                 let left_evaluation = left_expression.evaluate(runtime, context)?;
                 let right_evaluation = right_expression.evaluate(runtime, context)?;
 
-                // Division always returns a float. Theoretically it could be smart and try to use
-                // integers where possible, but this inconsistency seems like a worse UX
                 match (left_evaluation, right_evaluation) {
                     (
-                        Expression::Float {
+                        Expression::Number {
                             source_token: left_source,
                             value: left_value,
                         },
-                        Expression::Float {
+                        Expression::Number {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Float {
+                    ) => Ok(Expression::Number {
                         source_token: left_source.merge(right_source),
                         value: left_value / right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value / right_value as f32,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value as f32 / right_value,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value as f32 / right_value as f32,
                     }),
                     _ => Err("Cannot divide non-numeric expressions".to_string()),
                 }
@@ -771,54 +342,15 @@ impl Expression {
 
                 match (left_evaluation, right_evaluation) {
                     (
-                        Expression::Float {
+                        Expression::Number {
                             source_token: left_source,
                             value: left_value,
                         },
-                        Expression::Float {
+                        Expression::Number {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value % right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value % right_value as f32,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value as f32 % right_value,
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
+                    ) => Ok(Expression::Number {
                         source_token: left_source.merge(right_source),
                         value: left_value % right_value,
                     }),
@@ -835,61 +367,19 @@ impl Expression {
 
                 match (left_evaluation, right_evaluation) {
                     (
-                        Expression::Float {
+                        Expression::Number {
                             source_token: left_source,
                             value: left_value,
                         },
-                        Expression::Float {
+                        Expression::Number {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Float {
+                    ) => Ok(Expression::Number {
                         source_token: left_source.merge(right_source),
                         value: left_value.powf(right_value),
                     }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Float {
-                        source_token: left_source.merge(right_source),
-                        value: left_value.powi(right_value),
-                    }),
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => {
-                        // This is not natural for rust. It does not directly support int^float
-                        Ok(Expression::Float {
-                            source_token: left_source.merge(right_source),
-                            value: (left_value as f32).powf(right_value),
-                        })
-                    }
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
-                        source_token: left_source.merge(right_source),
-                        value: left_value.pow(right_value as u32),
-                    }),
-                    _ => Err("Cannot add non-numeric expressions".to_string()),
+                    _ => Err("Cannot exponentiate non-numeric expressions".to_string()),
                 }
             }
             Expression::Negation {
@@ -899,116 +389,14 @@ impl Expression {
                 let evaluation = expression.evaluate(runtime, context)?;
 
                 match evaluation {
-                    Expression::Float {
+                    Expression::Number {
                         source_token,
                         value,
-                    } => Ok(Expression::Float {
+                    } => Ok(Expression::Number {
                         source_token: source_token.capture(),
                         value: -1.0 * value,
                     }),
-                    Expression::Integer {
-                        source_token,
-                        value,
-                    } => {
-                        // This is not natural for rust. It does not directly support int^float
-                        Ok(Expression::Integer {
-                            source_token: source_token.capture(),
-                            value: -1 * value,
-                        })
-                    }
                     _ => Err("Cannot numerically negate non-numeric expressions".to_string()),
-                }
-            }
-
-            Expression::And {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_evaluation = left_expression.evaluate(runtime, context)?;
-                let right_evaluation = right_expression.evaluate(runtime, context)?;
-
-                let left_value: bool;
-                let left_token: Token;
-                match left_evaluation {
-                    Expression::Boolean {
-                        source_token,
-                        value,
-                    } => {
-                        left_value = value;
-                        left_token = source_token;
-                    }
-                    _ => return Err("Cannot or non-boolean expressions".to_string()),
-                }
-                if !left_value {
-                    return Ok(Expression::Boolean {
-                        source_token: left_token.capture(),
-                        value: false,
-                    });
-                }
-                match right_evaluation {
-                    Expression::Boolean {
-                        source_token,
-                        value,
-                    } => Ok(Expression::Boolean {
-                        source_token: left_token.merge(source_token),
-                        value,
-                    }),
-                    _ => Err("Cannot or non-boolean expressions".to_string()),
-                }
-            }
-            Expression::Or {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_evaluation = left_expression.evaluate(runtime, context)?;
-                let right_evaluation = right_expression.evaluate(runtime, context)?;
-
-                let left_value: bool;
-                let left_token: Token;
-                match left_evaluation {
-                    Expression::Boolean {
-                        source_token,
-                        value,
-                    } => {
-                        left_value = value;
-                        left_token = source_token;
-                    }
-                    _ => return Err("Cannot or non-boolean expressions".to_string()),
-                }
-                if left_value {
-                    return Ok(Expression::Boolean {
-                        source_token: left_token.capture(),
-                        value: true,
-                    });
-                }
-                match right_evaluation {
-                    Expression::Boolean {
-                        source_token,
-                        value,
-                    } => Ok(Expression::Boolean {
-                        source_token: left_token.merge(source_token),
-                        value,
-                    }),
-                    _ => Err("Cannot or non-boolean expressions".to_string()),
-                }
-            }
-            Expression::Not {
-                source_token: _,
-                expression,
-            } => {
-                let evaluation = expression.evaluate(runtime, context)?;
-
-                match evaluation {
-                    Expression::Boolean {
-                        source_token,
-                        value,
-                    } => Ok(Expression::Boolean {
-                        source_token: source_token.capture(),
-                        value: !value,
-                    }),
-                    _ => Err("Cannot do boolean negation on non-boolean expressions".to_string()),
                 }
             }
 
@@ -1048,462 +436,24 @@ impl Expression {
 
                         match (x_value, y_value) {
                             (
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: y,
                                 },
                             ) => {
-                                let result = *match runtime
-                                    .get_cell_code(x, y)?
-                                    .evaluate(runtime, context)
-                                {
-                                    EvaluationResult::ReturnValue { expression } => Ok(expression),
-                                    EvaluationResult::Error { message } => Err(message),
-                                    EvaluationResult::None => {
-                                        Err(String::from("Did not find return value"))
-                                    }
-                                }?;
+                                let result = runtime
+                                    .get_cell_code(x as i32, y as i32)?
+                                    .evaluate(runtime, context)?;
                                 Ok(result)
                             }
                             _ => Err("Something went very wrong".to_string()),
                         }
                     }
                     _ => Err("RValue must contain a cell address".to_string()),
-                }
-            }
-
-            Expression::BitwiseAnd {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
-                        source_token: left_source.merge(right_source),
-                        value: left_value & right_value,
-                    }),
-                    _ => Err("Bitwise and must use two integers".to_string()),
-                }
-            }
-            Expression::BitwiseOr {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
-                        source_token: left_source.merge(right_source),
-                        value: left_value | right_value,
-                    }),
-                    _ => Err("Bitwise or must use two integers".to_string()),
-                }
-            }
-            Expression::BitwiseNot {
-                source_token: _,
-                expression,
-            } => {
-                let value = expression.evaluate(runtime, context)?;
-
-                match value {
-                    Expression::Integer {
-                        source_token,
-                        value,
-                    } => Ok(Expression::Integer {
-                        source_token: source_token.capture(),
-                        value: !value,
-                    }),
-                    _ => Err("Bitwise not must use a integer".to_string()),
-                }
-            }
-            Expression::BitwiseXor {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
-                        source_token: left_source.merge(right_source),
-                        value: left_value ^ right_value,
-                    }),
-                    _ => Err("Bitwise xor must use two integers".to_string()),
-                }
-            }
-            Expression::BitwiseLeftShift {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
-                        source_token: left_source.merge(right_source),
-                        value: left_value << right_value,
-                    }),
-                    _ => Err("Bitwise shifts must use two integers".to_string()),
-                }
-            }
-            Expression::BitwiseRightShift {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Integer {
-                        source_token: left_source.merge(right_source),
-                        value: left_value >> right_value,
-                    }),
-                    _ => Err("Bitwise shifts must use two integers".to_string()),
-                }
-            }
-
-            Expression::Equals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: left_value == right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: float_equals(left_value, right_value),
-                    }),
-                    _ => Err(
-                        "Equality check can only be done on similar numerical values".to_string(),
-                    ),
-                }
-            }
-            Expression::NotEquals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: left_value != right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: !float_equals(left_value, right_value),
-                    }),
-                    _ => Err(
-                        "Equality check can only be done on similar numerical values".to_string(),
-                    ),
-                }
-            }
-            Expression::LessThan {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: left_value < right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => {
-                        let not_equal = !float_equals(left_value, right_value);
-                        Ok(Expression::Boolean {
-                            source_token: left_source.merge(right_source),
-                            value: left_value < right_value && not_equal,
-                        })
-                    }
-                    _ => Err(
-                        "Equality check can only be done on similar numerical values".to_string(),
-                    ),
-                }
-            }
-            Expression::LessThanOrEquals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: left_value < right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => {
-                        let equal = float_equals(left_value, right_value);
-                        Ok(Expression::Boolean {
-                            source_token: left_source.merge(right_source),
-                            value: left_value < right_value || equal,
-                        })
-                    }
-                    _ => Err(
-                        "Equality check can only be done on similar numerical values".to_string(),
-                    ),
-                }
-            }
-            Expression::GreaterThan {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: left_value > right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => {
-                        let not_equal = !float_equals(left_value, right_value);
-                        Ok(Expression::Boolean {
-                            source_token: left_source.merge(right_source),
-                            value: left_value > right_value && not_equal,
-                        })
-                    }
-                    _ => Err(
-                        "Equality check can only be done on similar numerical values".to_string(),
-                    ),
-                }
-            }
-            Expression::GreaterThanOrEquals {
-                source_token: _,
-                left_expression,
-                right_expression,
-            } => {
-                let left_value = left_expression.evaluate(runtime, context)?;
-                let right_value = right_expression.evaluate(runtime, context)?;
-
-                match (left_value, right_value) {
-                    (
-                        Expression::Integer {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Integer {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => Ok(Expression::Boolean {
-                        source_token: left_source.merge(right_source),
-                        value: left_value > right_value,
-                    }),
-                    (
-                        Expression::Float {
-                            source_token: left_source,
-                            value: left_value,
-                        },
-                        Expression::Float {
-                            source_token: right_source,
-                            value: right_value,
-                        },
-                    ) => {
-                        let equal = float_equals(left_value, right_value);
-                        Ok(Expression::Boolean {
-                            source_token: left_source.merge(right_source),
-                            value: left_value > right_value || equal,
-                        })
-                    }
-                    _ => Err(
-                        "Equality check can only be done on similar numerical values".to_string(),
-                    ),
-                }
-            }
-
-            Expression::FloatToInt {
-                source_token: _,
-                expression,
-            } => {
-                let value = expression.evaluate(runtime, context)?;
-
-                match value {
-                    Expression::Float {
-                        source_token,
-                        value,
-                    } => Ok(Expression::Integer {
-                        source_token: source_token.capture(),
-                        value: value as i32,
-                    }),
-                    _ => Err("Only floats can be converted to an integer".to_string()),
-                }
-            }
-            Expression::IntToFloat {
-                source_token: _,
-                expression,
-            } => {
-                let value = expression.evaluate(runtime, context)?;
-
-                match value {
-                    Expression::Integer {
-                        source_token,
-                        value,
-                    } => Ok(Expression::Float {
-                        source_token: source_token.capture(),
-                        value: value as f32,
-                    }),
-                    _ => Err("Only integers can be converted to a float".to_string()),
                 }
             }
 
@@ -1529,49 +479,38 @@ impl Expression {
                         },
                     ) => {
                         // This match purely to appease the rust type system.
-                        // The items should be integers at this point.
+                        // The items should be numbers at this point.
                         match (*first_x, *first_y, *last_x, *last_y) {
                             (
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_y,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_y,
                                 },
                             ) => {
+                                let (first_x, first_y, last_x, last_y) =
+                                    (first_x as i32, first_y as i32, last_x as i32, last_y as i32);
+
                                 // Prep first item
                                 let first_cell_statement =
                                     runtime.get_cell_code(first_x, first_y)?;
-                                let first_item = *match first_cell_statement
-                                    .evaluate(runtime, context)
-                                {
-                                    EvaluationResult::ReturnValue { expression } => Ok(expression),
-                                    EvaluationResult::Error { message } => Err(message),
-                                    EvaluationResult::None => {
-                                        Err(String::from("Did not find return value"))
-                                    }
-                                }?;
+                                let first_item = first_cell_statement.evaluate(runtime, context)?;
 
                                 let mut max_value;
 
                                 match first_item {
-                                    Expression::Integer {
-                                        source_token: _,
-                                        value,
-                                    } => {
-                                        max_value = value as f32;
-                                    }
-                                    Expression::Float {
+                                    Expression::Number {
                                         source_token: _,
                                         value,
                                     } => {
@@ -1587,29 +526,10 @@ impl Expression {
                                     for col in first_x..=last_x {
                                         let cell_statement = runtime.get_cell_code(col, row)?;
                                         let expression =
-                                            *match cell_statement.evaluate(runtime, context) {
-                                                EvaluationResult::ReturnValue { expression } => {
-                                                    Ok(expression)
-                                                }
-                                                EvaluationResult::Error { message } => Err(message),
-                                                EvaluationResult::None => {
-                                                    Err(String::from("Did not find return value"))
-                                                }
-                                            }?;
+                                            cell_statement.evaluate(runtime, context)?;
 
                                         match expression {
-                                            Expression::Integer {
-                                                source_token: _,
-                                                value,
-                                            } => {
-                                                if value as f32 > max_value
-                                                    && !float_equals(value as f32, max_value)
-                                                {
-                                                    max_value = value as f32;
-                                                    max_expression = expression.clone();
-                                                }
-                                            }
-                                            Expression::Float {
+                                            Expression::Number {
                                                 source_token: _,
                                                 value,
                                             } => {
@@ -1658,48 +578,37 @@ impl Expression {
                         },
                     ) => {
                         // This match purely to appease the rust type system.
-                        // The items should be integers at this point.
+                        // The items should be numbers at this point.
                         match (*first_x, *first_y, *last_x, *last_y) {
                             (
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_y,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_y,
                                 },
                             ) => {
+                                let (first_x, first_y, last_x, last_y) =
+                                    (first_x as i32, first_y as i32, last_x as i32, last_y as i32);
+
                                 // Prep first item
                                 let first_cell_statement =
                                     runtime.get_cell_code(first_x, first_y)?;
-                                let first_item = *match first_cell_statement
-                                    .evaluate(runtime, context)
-                                {
-                                    EvaluationResult::ReturnValue { expression } => Ok(expression),
-                                    EvaluationResult::Error { message } => Err(message),
-                                    EvaluationResult::None => {
-                                        Err(String::from("Did not find return value"))
-                                    }
-                                }?;
+                                let first_item = first_cell_statement.evaluate(runtime, context)?;
                                 let mut min_value;
 
                                 match first_item {
-                                    Expression::Integer {
-                                        source_token: _,
-                                        value,
-                                    } => {
-                                        min_value = value as f32;
-                                    }
-                                    Expression::Float {
+                                    Expression::Number {
                                         source_token: _,
                                         value,
                                     } => {
@@ -1715,29 +624,10 @@ impl Expression {
                                     for col in first_x..=last_x {
                                         let cell_statement = runtime.get_cell_code(col, row)?;
                                         let expression =
-                                            *match cell_statement.evaluate(runtime, context) {
-                                                EvaluationResult::ReturnValue { expression } => {
-                                                    Ok(expression)
-                                                }
-                                                EvaluationResult::Error { message } => Err(message),
-                                                EvaluationResult::None => {
-                                                    Err(String::from("Did not find return value"))
-                                                }
-                                            }?;
+                                            cell_statement.evaluate(runtime, context)?;
 
                                         match expression {
-                                            Expression::Integer {
-                                                source_token: _,
-                                                value,
-                                            } => {
-                                                if (value as f32) < min_value
-                                                    && !float_equals(value as f32, min_value)
-                                                {
-                                                    min_value = value as f32;
-                                                    min_expression = expression.clone();
-                                                }
-                                            }
-                                            Expression::Float {
+                                            Expression::Number {
                                                 source_token: _,
                                                 value,
                                             } => {
@@ -1773,7 +663,7 @@ impl Expression {
                 let last_position = last_address.evaluate(runtime, context)?;
 
                 // This match purely to appease the rust type system.
-                // The items should be integers at this point.
+                // The items should be numbers at this point.
                 match (first_postition, last_position) {
                     (
                         Expression::CellAddress {
@@ -1789,23 +679,26 @@ impl Expression {
                     ) => {
                         match (*first_x, *first_y, *last_x, *last_y) {
                             (
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_y,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_y,
                                 },
                             ) => {
+                                let (first_x, first_y, last_x, last_y) =
+                                    (first_x as i32, first_y as i32, last_x as i32, last_y as i32);
+
                                 // Prep first item
                                 let cell_count = (last_x - first_x + 1) * (last_y - first_y + 1);
                                 let mut sum_amount = 0.0;
@@ -1815,24 +708,10 @@ impl Expression {
                                     for col in first_x..=last_x {
                                         let cell_statement = runtime.get_cell_code(col, row)?;
                                         let expression =
-                                            *match cell_statement.evaluate(runtime, context) {
-                                                EvaluationResult::ReturnValue { expression } => {
-                                                    Ok(expression)
-                                                }
-                                                EvaluationResult::Error { message } => Err(message),
-                                                EvaluationResult::None => {
-                                                    Err(String::from("Did not find return value"))
-                                                }
-                                            }?;
+                                            cell_statement.evaluate(runtime, context)?;
 
                                         match expression {
-                                            Expression::Integer {
-                                                source_token: _,
-                                                value,
-                                            } => {
-                                                sum_amount += value as f32;
-                                            }
-                                            Expression::Float {
+                                            Expression::Number {
                                                 source_token: _,
                                                 value,
                                             } => {
@@ -1844,9 +723,9 @@ impl Expression {
                                         }
                                     }
                                 }
-                                return Ok(Expression::Float {
+                                return Ok(Expression::Number {
                                     source_token: source_token.clone().capture(),
-                                    value: sum_amount / cell_count as f32,
+                                    value: sum_amount / cell_count as f64,
                                 });
                             }
                             _ => {
@@ -1879,26 +758,29 @@ impl Expression {
                         },
                     ) => {
                         // This match purely to appease the rust type system.
-                        // The items should be integers at this point.
+                        // The items should be numbers at this point.
                         match (*first_x, *first_y, *last_x, *last_y) {
                             (
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: first_y,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_x,
                                 },
-                                Expression::Integer {
+                                Expression::Number {
                                     source_token: _,
                                     value: last_y,
                                 },
                             ) => {
+                                let (first_x, first_y, last_x, last_y) =
+                                    (first_x as i32, first_y as i32, last_x as i32, last_y as i32);
+
                                 // Prep first item
                                 let mut sum_amount = 0.0;
 
@@ -1907,24 +789,10 @@ impl Expression {
                                     for col in first_x..=last_x {
                                         let cell_statement = runtime.get_cell_code(col, row)?;
                                         let expression =
-                                            *match cell_statement.evaluate(runtime, context) {
-                                                EvaluationResult::ReturnValue { expression } => {
-                                                    Ok(expression)
-                                                }
-                                                EvaluationResult::Error { message } => Err(message),
-                                                EvaluationResult::None => {
-                                                    Err(String::from("Did not find return value"))
-                                                }
-                                            }?;
+                                            cell_statement.evaluate(runtime, context)?;
 
                                         match expression {
-                                            Expression::Integer {
-                                                source_token: _,
-                                                value,
-                                            } => {
-                                                sum_amount += value as f32;
-                                            }
-                                            Expression::Float {
+                                            Expression::Number {
                                                 source_token: _,
                                                 value,
                                             } => {
@@ -1936,7 +804,7 @@ impl Expression {
                                         }
                                     }
                                 }
-                                return Ok(Expression::Float {
+                                return Ok(Expression::Number {
                                     source_token: source_token.clone().capture(),
                                     value: sum_amount,
                                 });
@@ -1953,9 +821,9 @@ impl Expression {
     }
 }
 
-fn float_equals(a: f32, b: f32) -> bool {
-    // Floats within a millionth of each other are consitered equal
-    const FLOAT_COMPARISON_TOLERANCE: f32 = 0.000001;
+fn float_equals(a: f64, b: f64) -> bool {
+    // Numbers within a millionth of each other are consitered equal
+    const FLOAT_COMPARISON_TOLERANCE: f64 = 0.000001;
 
     (a - b).abs() < FLOAT_COMPARISON_TOLERANCE
 }

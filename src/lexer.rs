@@ -96,41 +96,10 @@ impl Lexer {
             ("/".to_string(), TokenType::Division),
             ("%".to_string(), TokenType::Modulo),
             ("**".to_string(), TokenType::Exponentiation),
-            ("&&".to_string(), TokenType::And),
-            ("||".to_string(), TokenType::Or),
-            ("!".to_string(), TokenType::Not),
-            ("&".to_string(), TokenType::BitwiseAnd),
-            ("|".to_string(), TokenType::BitwiseOr),
-            ("~".to_string(), TokenType::BitwiseNot),
-            ("^".to_string(), TokenType::BitwiseXor),
-            ("<<".to_string(), TokenType::BitwiseLeftShift),
-            (">>".to_string(), TokenType::BitwiseRightShift),
-            ("==".to_string(), TokenType::Equals),
-            ("!=".to_string(), TokenType::NotEquals),
-            ("<".to_string(), TokenType::LessThan),
-            ("<=".to_string(), TokenType::LessThanOrEquals),
-            (">".to_string(), TokenType::GreaterThan),
-            (">=".to_string(), TokenType::GreaterThanOrEquals),
-            ("int".to_string(), TokenType::FloatToInt),
-            ("float".to_string(), TokenType::IntToFloat),
             ("max".to_string(), TokenType::Max),
             ("min".to_string(), TokenType::Min),
             ("mean".to_string(), TokenType::Mean),
             ("sum".to_string(), TokenType::Sum),
-            // Statement stuff
-            ("{".to_string(), TokenType::StartBlock),
-            ("}".to_string(), TokenType::EndBlock),
-            (";".to_string(), TokenType::EndOfLine),
-            ("=".to_string(), TokenType::Assignment),
-            ("if".to_string(), TokenType::If),
-            ("else".to_string(), TokenType::Else),
-            ("for".to_string(), TokenType::For),
-            ("in".to_string(), TokenType::In),
-            ("to".to_string(), TokenType::Range),
-            ("return".to_string(), TokenType::Return),
-            // Edge case for boolean primatives
-            ("true".to_string(), TokenType::Boolean),
-            ("false".to_string(), TokenType::Boolean),
         ]);
 
         let mut lexer = Lexer::new(source_code.clone());
@@ -177,44 +146,8 @@ impl Lexer {
                     while lexer.peek().is_ok() && lexer.peek().unwrap().is_digit(10) {
                         lexer.capture();
                     }
-                    lexer.save_token(TokenType::Float);
-                    continue;
                 }
-                lexer.save_token(TokenType::Integer);
-                continue;
-            }
-
-            // String literals
-            if lexer.peek().unwrap() == '\"' {
-                lexer.capture();
-                while lexer.peek().is_ok() {
-                    if lexer.peek().unwrap() == '\"' {
-                        break;
-                    }
-                    lexer.capture();
-                }
-                if lexer.peek().unwrap() == '\"' {
-                    lexer.capture();
-                    lexer.save_token(TokenType::String);
-                } else {
-                    return Err(SourceCodeError {
-                        location: vec![lexer.current_index],
-                        error_message: String::from("Unknown symbol"),
-                    });
-                }
-                continue;
-            }
-
-            // Variable
-            if lexer.peek().unwrap().is_alphabetic() {
-                lexer.capture();
-                while lexer.peek().is_ok() {
-                    if !lexer.peek().unwrap().is_alphanumeric() {
-                        break;
-                    }
-                    lexer.capture();
-                }
-                lexer.save_token(TokenType::Variable);
+                lexer.save_token(TokenType::Number);
                 continue;
             }
 

@@ -62,11 +62,7 @@ pub enum TokenType {
     PoundSign,
     Comma,
 
-    Integer,
-    Float,
-    Boolean,
-    String,
-    Variable,
+    Number,
 
     Addition,
     Subtraction,
@@ -76,43 +72,10 @@ pub enum TokenType {
     Exponentiation,
     Negation,
 
-    And,
-    Or,
-    Not,
-
-    BitwiseAnd,
-    BitwiseOr,
-    BitwiseNot,
-    BitwiseXor,
-    BitwiseLeftShift,
-    BitwiseRightShift,
-
-    Equals,
-    NotEquals,
-    LessThan,
-    LessThanOrEquals,
-    GreaterThan,
-    GreaterThanOrEquals,
-
-    FloatToInt,
-    IntToFloat,
-
     Max,
     Min,
     Mean,
     Sum,
-
-    StartBlock,
-    EndBlock,
-
-    Assignment,
-    EndOfLine,
-    If,
-    Else,
-    For,
-    In,
-    Range,
-    Return,
 }
 
 impl Default for TokenType {

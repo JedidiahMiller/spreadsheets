@@ -1,7 +1,6 @@
 use crate::cell_context::CellContext;
+use crate::expressions::Expression;
 use crate::grid::*;
-use crate::statements::EvaluationResult;
-use crate::statements::Statement;
 
 pub struct Runtime {
     grid_state: GridState,
@@ -29,12 +28,11 @@ impl Runtime {
             .code
             .evaluate(&self, &mut eval_context);
         match eval_result {
-            EvaluationResult::ReturnValue { expression } => {
-                self.grid_state.grid[uy][ux].primative = expression;
+            Ok(expression) => {
+                self.grid_state.grid[uy][ux].primative = Box::new(expression);
                 Ok(())
             }
-            EvaluationResult::None => Err(String::from("No return value found")),
-            EvaluationResult::Error { message } => Err(message),
+            Err(message) => Err(message),
         }
     }
 
@@ -50,7 +48,7 @@ impl Runtime {
         Ok(Box::new(*self.grid_state.grid[uy][ux].clone()))
     }
 
-    pub fn get_cell_code(&self, x: i32, y: i32) -> Result<Statement, String> {
+    pub fn get_cell_code(&self, x: i32, y: i32) -> Result<Expression, String> {
         let cell = self.get_cell(x, y)?;
         Ok(*cell.code)
     }

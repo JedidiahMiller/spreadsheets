@@ -1,4 +1,3 @@
-use crate::statements::Statement;
 use crate::token::Token;
 
 use crate::expressions::Expression;
@@ -6,18 +5,15 @@ use crate::expressions::Expression;
 #[derive(Clone)]
 pub struct Cell {
     pub source_code: String,
-    pub code: Box<Statement>,
+    pub code: Box<Expression>,
     pub primative: Box<Expression>,
 }
 
 impl Default for Cell {
     fn default() -> Self {
-        let default_value = Box::new(Expression::String {
+        let code = Box::new(Expression::String {
             source_token: Token::default(),
             value: "".to_owned(),
-        });
-        let code = Box::new(Statement::Return {
-            expression: default_value,
         });
         let primative = Box::new(Expression::String {
             source_token: Token::default(),

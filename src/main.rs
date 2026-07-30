@@ -6,7 +6,6 @@ mod grid;
 mod lexer;
 mod parser;
 mod runtime;
-mod statements;
 mod token;
 
 use std::io::{Write, stdin, stdout};
