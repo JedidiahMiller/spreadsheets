@@ -20,27 +20,18 @@ fn main() {
     );
     stdout().flush().unwrap();
 
+    // Get user confirmation to launch (press any key)
     let mut garbage = String::new();
     stdin()
         .read_line(&mut garbage)
         .expect("Could not get user confirmation to launch app");
 
     // Run the app
-    let curse_controller = CurseController::new();
-    if curse_controller.is_err() {
-        println!(
-            "Error starting controller: {}",
-            curse_controller.err().unwrap().error_message
-        );
-        return;
-    }
-    let mut curse_controller = curse_controller.unwrap();
-    match curse_controller.start_event_loop() {
-        Ok(_) => {
-            println!("Goodbye");
-        }
-        Err(error) => {
-            println!("{}", error.error_message);
-        }
+    match CurseController::new() {
+        Ok(mut curse_controller) => match curse_controller.start_event_loop() {
+            Ok(_) => println!("Goodbye"),
+            Err(error) => println!("{}", error.error_message),
+        },
+        Err(error) => println!("Error starting app: {}", error.error_message),
     }
 }

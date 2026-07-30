@@ -4,6 +4,7 @@ use pancurses::{
 use pancurses::{Window, curs_set, endwin, initscr, noecho};
 
 use crate::cell_context::CellContext;
+use crate::curse_controller::OperationMode::{Edit, Normal};
 use crate::errors::SourceCodeError;
 use crate::errors::{Error, ErrorType::*};
 use crate::grid::Cell;
@@ -18,6 +19,12 @@ const FEEDBACK_WINDOW: i32 = 6;
 const TERMINAL_MIN_WIDTH: i32 = 24;
 const TERMINAL_MIN_HEIGHT: i32 = 19;
 
+enum OperationMode {
+    Normal,
+    Edit,
+    Command,
+}
+
 pub struct CurseController {
     master_window: Window,
     source_code_window: Window,
@@ -26,7 +33,8 @@ pub struct CurseController {
     grid_size: (usize, usize),
     cursor_position: (i32, i32),
     runtime: Box<Runtime>,
-    editing_source: bool,
+    operation_mode: OperationMode,
+    command_buffer: Option<String>,
     new_source_code: String,
     feedback: (String, String, String),
 }
@@ -105,7 +113,8 @@ impl CurseController {
         let runtime = Box::new(Runtime::new(grid_size));
 
         // Other defaults
-        let editing_source = false;
+        let operation_mode = Normal;
+        let command_buffer = None;
         let new_source_code = String::from("");
         let feedback = (String::from(""), String::from(""), String::from(""));
 
@@ -117,7 +126,8 @@ impl CurseController {
             grid_size,
             cursor_position,
             runtime,
-            editing_source,
+            operation_mode,
+            command_buffer,
             new_source_code,
             feedback,
         })
@@ -126,95 +136,105 @@ impl CurseController {
     pub fn start_event_loop(&mut self) -> Result<(), Error> {
         loop {
             self.render();
+
+            // Get user input
             let key = self.master_window.getch();
             if key.is_none() {
                 continue;
             };
             let key = key.unwrap();
 
-            // Hotkeys
-            match key {
-                pancurses::Input::Character('q') => {
-                    // Quit command
-                    if !self.editing_source {
-                        Self::exit();
-                        return Ok(());
-                    }
-                }
-                pancurses::Input::Character('\t') => {
-                    // Enter
-                    if self.editing_source {
-                        match self.save_new_source() {
-                            Ok(_) => {
-                                self.editing_source = !self.editing_source;
-                            }
-                            Err(error) => {
-                                self.show_source_code_error(error);
-                            }
-                        }
-                    } else {
-                        self.editing_source = !self.editing_source;
-                    }
-                    continue;
-                }
-                pancurses::Input::KeyResize => {
-                    // Window resize
-                    Self::exit();
-                    return Err(Error {
-                        error_type: UserError,
-                        error_message: "Cannot resize window while running".to_string(),
-                    });
-                }
-                _ => {}
+            if (key == pancurses::Input::KeyResize) {
+                // Window resize
+                Self::exit();
+                return Err(Error {
+                    error_type: UserError,
+                    error_message: "Cannot resize window while running".to_string(),
+                });
             }
 
-            // Cell selection
-            if !self.editing_source {
-                match key {
-                    pancurses::Input::KeyUp => {
-                        // Arrow keys
-                        if !self.editing_source && self.cursor_position.1 > 0 {
+            match self.operation_mode {
+                OperationMode::Normal => match key {
+                    pancurses::Input::KeyUp | pancurses::Input::Character('k') => {
+                        if self.cursor_position.1 > 0 {
                             self.cursor_position.1 -= 1;
                             self.update_selected_cell();
                         };
                     }
-                    pancurses::Input::KeyRight => {
-                        if !self.editing_source
-                            && self.cursor_position.0 < self.grid_size.0 as i32 - 1
-                        {
+                    pancurses::Input::KeyRight | pancurses::Input::Character('l') => {
+                        if self.cursor_position.0 < self.grid_size.0 as i32 - 1 {
                             self.cursor_position.0 += 1;
                             self.update_selected_cell();
                         };
                     }
-                    pancurses::Input::KeyDown => {
-                        if !self.editing_source
-                            && self.cursor_position.1 < self.grid_size.1 as i32 - 1
-                        {
+                    pancurses::Input::KeyDown | pancurses::Input::Character('j') => {
+                        if self.cursor_position.1 < self.grid_size.1 as i32 - 1 {
                             self.cursor_position.1 += 1;
                             self.update_selected_cell();
                         };
                     }
-                    pancurses::Input::KeyLeft => {
-                        if !self.editing_source && self.cursor_position.0 > 0 {
+                    pancurses::Input::KeyLeft | pancurses::Input::Character('h') => {
+                        if self.cursor_position.0 > 0 {
                             self.cursor_position.0 -= 1;
                             self.update_selected_cell();
                         };
                     }
+                    pancurses::Input::Character('i') => {
+                        self.operation_mode = OperationMode::Edit;
+                    }
+                    pancurses::Input::Character(':') => {
+                        self.command_buffer = Some("".to_string());
+                        self.operation_mode = OperationMode::Command;
+                    }
                     _ => {}
-                }
-            }
-
-            // Type source code
-            if self.editing_source {
-                match key {
+                },
+                OperationMode::Edit => match key {
                     pancurses::Input::Character('\u{7f}') => {
                         self.new_source_code.pop();
                     }
+                    pancurses::Input::Character('\u{1b}') => {
+                        // Todo: handler source code errors
+                        match self.save_new_source() {
+                            Ok(_) => {}
+                            Err(_) => {}
+                        }
+                        self.operation_mode = OperationMode::Normal;
+                    }
+                    // Todo: handle source code errors
+                    pancurses::Input::Character('\n') => match self.save_new_source() {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    },
                     pancurses::Input::Character(c) => {
                         self.new_source_code.push(c);
                     }
                     _ => {}
-                }
+                },
+                OperationMode::Command => match key {
+                    pancurses::Input::Character('\n') => {
+                        match self.command_buffer.as_deref() {
+                            Some("q") => {
+                                Self::exit();
+                                return Ok(());
+                            }
+                            _ => {}
+                        }
+
+                        self.command_buffer = None;
+                        self.operation_mode = OperationMode::Normal;
+                    }
+                    pancurses::Input::Character('\u{7f}') => {
+                        if let Some(buffer) = &mut self.command_buffer {
+                            buffer.pop();
+                        }
+                    }
+                    pancurses::Input::Character(c) => {
+                        if let Some(buffer) = &mut self.command_buffer {
+                            buffer.push(c);
+                        }
+                    }
+                    _ => {}
+                },
             }
         }
     }
@@ -372,9 +392,7 @@ impl CurseController {
         // Source code window
         self.render_source_code();
         self.box_window(&self.source_code_window);
-        if self.editing_source {
-            self.highlight_source_box();
-        };
+        self.highlight_source_box();
 
         // Grid
         self.create_grid();
