@@ -5,4 +5,3 @@ edition = "2024"
 
 [dependencies]
 pancurses = "0.17.0"
-rand = "0.8.5"
