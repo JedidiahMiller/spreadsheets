@@ -15,7 +15,7 @@ use crate::token::TokenType;
 
 const GAP_SIZE: i32 = 15;
 const SOURCE_CODE_WINDOW: i32 = 8;
-const FEEDBACK_WINDOW: i32 = 6;
+const MODAL_HEIGHT: i32 = 7;
 const TERMINAL_MIN_WIDTH: i32 = 24;
 const TERMINAL_MIN_HEIGHT: i32 = 19;
 
@@ -23,20 +23,20 @@ enum OperationMode {
     Normal,
     Edit,
     Command,
+    Modal,
 }
 
 pub struct CurseController {
     master_window: Window,
     source_code_window: Window,
     grid_window: Window,
-    feedback_window: Window,
     grid_size: (usize, usize),
     cursor_position: (i32, i32),
     runtime: Box<Runtime>,
     operation_mode: OperationMode,
     command_buffer: Option<String>,
     new_source_code: String,
-    feedback: (String, String, String),
+    last_error: Option<SourceCodeError>,
 }
 
 impl CurseController {
@@ -62,7 +62,7 @@ impl CurseController {
 
         let (y, x) = master_window.get_max_yx();
 
-        let grid_height: i32 = y - SOURCE_CODE_WINDOW - FEEDBACK_WINDOW;
+        let grid_height: i32 = y - SOURCE_CODE_WINDOW;
 
         // Source code window
         let source_code_window: Window;
@@ -88,18 +88,6 @@ impl CurseController {
             }
         }
 
-        // Data window
-        let data_window: Window;
-        match master_window.subwin(FEEDBACK_WINDOW, x, SOURCE_CODE_WINDOW + grid_height, 0) {
-            Ok(window) => data_window = window,
-            Err(_) => {
-                return Err(Error {
-                    error_type: UnexpectedError,
-                    error_message: "Couldn't create data window".to_string(),
-                });
-            }
-        }
-
         // Grid size
         let width = grid_window.get_max_x() - (grid_window.get_max_x() % GAP_SIZE);
         let width = ((width / GAP_SIZE) - 1) as usize;
@@ -116,20 +104,19 @@ impl CurseController {
         let operation_mode = Normal;
         let command_buffer = None;
         let new_source_code = String::from("");
-        let feedback = (String::from(""), String::from(""), String::from(""));
+        let last_error = None;
 
         Ok(CurseController {
             master_window,
             source_code_window,
             grid_window,
-            feedback_window: data_window,
             grid_size,
             cursor_position,
             runtime,
             operation_mode,
             command_buffer,
             new_source_code,
-            feedback,
+            last_error,
         })
     }
 
@@ -189,40 +176,47 @@ impl CurseController {
                     _ => {}
                 },
                 OperationMode::Edit => match key {
+                    // Delete key
                     pancurses::Input::Character('\u{7f}') => {
                         self.new_source_code.pop();
                     }
+                    // Escape key
                     pancurses::Input::Character('\u{1b}') => {
-                        // Todo: handler source code errors
-                        match self.save_new_source() {
-                            Ok(_) => {}
-                            Err(_) => {}
+                        if let Err(error) = self.save_new_source() {
+                            self.last_error = Some(error);
                         }
                         self.operation_mode = OperationMode::Normal;
                     }
-                    // Todo: handle source code errors
-                    pancurses::Input::Character('\n') => match self.save_new_source() {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    },
+                    // Return key
+                    pancurses::Input::Character('\n') => {
+                        if let Err(error) = self.save_new_source() {
+                            self.last_error = Some(error);
+                        }
+                    }
                     pancurses::Input::Character(c) => {
                         self.new_source_code.push(c);
                     }
                     _ => {}
                 },
                 OperationMode::Command => match key {
+                    // Enter key
                     pancurses::Input::Character('\n') => {
                         match self.command_buffer.as_deref() {
                             Some("q") => {
                                 Self::exit();
                                 return Ok(());
                             }
-                            _ => {}
+                            Some("c") => {
+                                self.operation_mode = OperationMode::Modal;
+                            }
+                            _ => {
+                                self.operation_mode = OperationMode::Normal;
+                            }
                         }
 
                         self.command_buffer = None;
-                        self.operation_mode = OperationMode::Normal;
                     }
+                    // Delete key
                     pancurses::Input::Character('\u{7f}') => {
                         if let Some(buffer) = &mut self.command_buffer {
                             buffer.pop();
@@ -232,6 +226,13 @@ impl CurseController {
                         if let Some(buffer) = &mut self.command_buffer {
                             buffer.push(c);
                         }
+                    }
+                    _ => {}
+                },
+                OperationMode::Modal => match key {
+                    // Escape key
+                    pancurses::Input::Character('\u{1b}') => {
+                        self.operation_mode = OperationMode::Normal;
                     }
                     _ => {}
                 },
@@ -267,10 +268,8 @@ impl CurseController {
         }
 
         // Create tokens
-        // Turn into a return statement if it is a simple primitive
-        if should_be_primitive {
-            working_source_code = format!("return {};", working_source_code);
-        }
+        // Wrap in a return statement so the parser sees a full program
+        working_source_code = format!("return {};", working_source_code);
 
         let mut tokens = Lexer::lex(&working_source_code);
         if tokens.is_err() {
@@ -358,7 +357,7 @@ impl CurseController {
         }
 
         // Reset error messages and such
-        self.clear_feedback();
+        self.last_error = None;
 
         Ok(())
     }
@@ -399,9 +398,10 @@ impl CurseController {
         self.highlight_cell(self.cursor_position.0, self.cursor_position.1);
         self.render_cell_contents();
 
-        // Feedback window
-        self.box_window(&self.feedback_window);
-        self.render_feedback();
+        // Error modal
+        if let OperationMode::Modal = self.operation_mode {
+            self.render_modal();
+        }
     }
 
     fn render_source_code(&self) {
@@ -412,53 +412,55 @@ impl CurseController {
         }
     }
 
-    fn render_feedback(&self) {
-        if FEEDBACK_WINDOW != 6 {
-            panic!("Programming is hard. FEEDBACK_WINDOW is expected to be 6.")
-        };
+    fn render_modal(&self) {
+        let (max_y, max_x) = self.master_window.get_max_yx();
+        let modal_width = (max_x * 2 / 3).max(20);
+        let modal_height = MODAL_HEIGHT;
+        let start_x = (max_x - modal_width) / 2;
+        let start_y = (max_y - modal_height) / 2;
 
-        let current_cell_value = self
-            .runtime
-            .get_cell(self.cursor_position.0, self.cursor_position.1)
-            .unwrap()
-            .primative;
-        let current_cell_value = current_cell_value.serialize().unwrap();
-
-        self.feedback_window
-            .mvaddstr(1, 2, format!("Current cell value: {}", current_cell_value));
-        self.feedback_window.mvaddstr(2, 2, self.feedback.0.clone());
-        self.feedback_window.mvaddstr(3, 2, self.feedback.1.clone());
-        self.feedback_window.mvaddstr(4, 2, self.feedback.2.clone());
-    }
-
-    fn set_feedback(&mut self, line1: String, line2: String, line3: String) {
-        self.feedback = (line1, line2, line3);
-    }
-
-    fn clear_feedback(&mut self) {
-        self.set_feedback(String::from(""), String::from(""), String::from(""));
-    }
-
-    fn show_source_code_error(&mut self, error: SourceCodeError) {
-        let working_source_code = String::from(self.new_source_code.trim());
-        let is_expression = working_source_code.starts_with('=');
-        let working_indices = if is_expression {
-            error.location.iter().map(|&x| x + 1).collect::<Vec<_>>()
-        } else {
-            error.location
-        };
-
-        let mut arrows = String::from("");
-        for i in 0..self.new_source_code.len() {
-            let index = i + if is_expression { 1 } else { 0 };
-            if working_indices.contains(&index) {
-                arrows.push('^');
-            } else {
-                arrows.push(' ');
-            }
+        // Clear the modal's area
+        let blank_line = " ".repeat(modal_width as usize);
+        for y in start_y..(start_y + modal_height) {
+            self.master_window
+                .mvaddnstr(y, start_x, &blank_line, modal_width);
         }
 
-        self.set_feedback(working_source_code, arrows, error.error_message);
+        // Border
+        for x in (start_x + 1)..(start_x + modal_width - 1) {
+            self.master_window.mvaddch(start_y, x, ACS_HLINE());
+            self.master_window
+                .mvaddch(start_y + modal_height - 1, x, ACS_HLINE());
+        }
+        for y in (start_y + 1)..(start_y + modal_height - 1) {
+            self.master_window.mvaddch(y, start_x, ACS_VLINE());
+            self.master_window
+                .mvaddch(y, start_x + modal_width - 1, ACS_VLINE());
+        }
+        self.master_window.mvaddch(start_y, start_x, ACS_ULCORNER());
+        self.master_window
+            .mvaddch(start_y, start_x + modal_width - 1, ACS_URCORNER());
+        self.master_window
+            .mvaddch(start_y + modal_height - 1, start_x, ACS_LLCORNER());
+        self.master_window.mvaddch(
+            start_y + modal_height - 1,
+            start_x + modal_width - 1,
+            ACS_LRCORNER(),
+        );
+
+        self.master_window
+            .mvaddstr(start_y + 1, start_x + 2, "Cell Error");
+
+        let close_hint = "Esc to close";
+        let hint_x = start_x + modal_width - 2 - close_hint.len() as i32;
+        self.master_window.mvaddstr(start_y + 1, hint_x, close_hint);
+
+        let message = match &self.last_error {
+            Some(error) => error.error_message.clone(),
+            None => "No error for this cell.".to_string(),
+        };
+        self.master_window
+            .mvaddnstr(start_y + 3, start_x + 2, message, modal_width - 4);
     }
 
     fn render_cell_contents(&self) {
