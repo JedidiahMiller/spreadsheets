@@ -22,6 +22,7 @@ impl Runtime {
         let uy = y as usize;
         self.grid_state.grid[uy][ux].source_code = cell.source_code.clone();
         self.grid_state.grid[uy][ux].code = cell.code.clone();
+        self.grid_state.grid[uy][ux].error = cell.error.clone();
 
         let mut eval_context = CellContext::default();
         let eval_result = self.grid_state.grid[uy][ux]

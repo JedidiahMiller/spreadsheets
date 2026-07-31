@@ -1,8 +1,10 @@
 use pancurses::{
     A_BOLD, A_REVERSE, ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS, ACS_ULCORNER, ACS_URCORNER,
-    ACS_VLINE,
+    ACS_VLINE, COLOR_PAIR, COLOR_RED,
 };
-use pancurses::{Window, curs_set, endwin, initscr, noecho};
+use pancurses::{
+    Window, curs_set, endwin, init_pair, initscr, noecho, start_color, use_default_colors,
+};
 
 use crate::cell_context::CellContext;
 use crate::column::column_index_to_letters;
@@ -17,7 +19,8 @@ use crate::runtime::Runtime;
 use crate::token::Token;
 
 const GAP_SIZE: i32 = 15;
-const SOURCE_CODE_WINDOW: i32 = 8;
+const SOURCE_CODE_WINDOW: i32 = 6;
+const ERROR_COLOR_PAIR: i16 = 1;
 const MODAL_HEIGHT: i32 = 7;
 const TERMINAL_MIN_WIDTH: i32 = 24;
 const TERMINAL_MIN_HEIGHT: i32 = 19;
@@ -69,6 +72,10 @@ impl CurseController {
         noecho();
         curs_set(0);
         master_window.keypad(true);
+
+        start_color();
+        use_default_colors();
+        init_pair(ERROR_COLOR_PAIR, COLOR_RED, -1);
 
         if master_window.get_max_x() < TERMINAL_MIN_WIDTH
             || master_window.get_max_y() < TERMINAL_MIN_HEIGHT
@@ -331,18 +338,23 @@ impl CurseController {
     }
 
     fn save_new_source(&mut self) -> Result<(), SourceCodeError> {
-        // Clean source code
+        // Clean source code. Empty input falls through and clears the cell,
+        // just like any other plain-string (non "=") save.
         let working_source_code = String::from(self.new_source_code.trim());
-        if working_source_code.len() == 0 {
-            return Ok(());
-        }
 
         // Cells starting with = hold an expression, everything else is a
         // plain string literal
         let code = match working_source_code.strip_prefix('=') {
             Some(expression_source) => {
-                let tokens = Lexer::lex(&expression_source.to_string())?;
-                Parser::parse_code(tokens)?
+                let parsed =
+                    Lexer::lex(&expression_source.to_string()).and_then(Parser::parse_code);
+                match parsed {
+                    Ok(code) => code,
+                    Err(error) => {
+                        self.save_cell_error(error.clone());
+                        return Err(error);
+                    }
+                }
             }
             None => Expression::String {
                 source_token: Token::default(),
@@ -351,15 +363,18 @@ impl CurseController {
         };
 
         // Evaluate primitive
-        let primitive = CellContext::evaluate_with_context(&self.runtime, &code);
-        if primitive.is_err() {
-            let message = primitive.err().unwrap();
-            return Err(SourceCodeError {
-                location: vec![0],
-                error_message: format!("Expression failed to evaluate: {}", message),
-            });
-        }
-        let primative = Box::new(primitive.unwrap());
+        let primative = match CellContext::evaluate_with_context(&self.runtime, &code) {
+            Ok(value) => Box::new(value),
+            Err(message) => {
+                // No specific location: the whole formula gets underlined.
+                let error = SourceCodeError {
+                    location: vec![],
+                    error_message: message,
+                };
+                self.save_cell_error(error.clone());
+                return Err(error);
+            }
+        };
 
         // Create cells
         let backup_cell = *self
@@ -370,6 +385,7 @@ impl CurseController {
             source_code: self.new_source_code.clone(),
             code: Box::new(code),
             primative: primative.clone(),
+            error: None,
         };
 
         // This should not error because the parameters already are validated
@@ -396,6 +412,26 @@ impl CurseController {
         self.last_error = None;
 
         Ok(())
+    }
+
+    // Persists an invalid formula rather than discarding it, so the cell
+    // shows =ERROR and can be re-edited from its original source.
+    fn save_cell_error(&mut self, error: SourceCodeError) {
+        let placeholder = Box::new(Expression::String {
+            source_token: Token::default(),
+            value: String::new(),
+        });
+        let cell = Cell {
+            source_code: self.new_source_code.clone(),
+            code: placeholder.clone(),
+            primative: placeholder,
+            error: Some(error.clone()),
+        };
+        // The placeholder code always evaluates cleanly, so this can't fail.
+        self.runtime
+            .set_cell(self.cursor_position.0, self.cursor_position.1, &cell)
+            .unwrap();
+        self.last_error = Some(error);
     }
 
     fn update_cell_primitives(&mut self) -> Result<(), String> {
@@ -428,6 +464,9 @@ impl CurseController {
         self.render_source_code();
         self.box_window(&self.source_code_window);
         self.render_mode_indicator();
+        if !matches!(self.operation_mode, OperationMode::Edit) {
+            self.render_cell_error();
+        }
 
         // Grid
         self.create_grid();
@@ -444,8 +483,63 @@ impl CurseController {
         let lines = self.new_source_code.lines();
         for (i, line) in lines.enumerate() {
             self.source_code_window
-                .mvaddstr(1 + i as i32, 1, format!(" {}", line));
+                .mvaddstr(2 + i as i32, 1, format!(" {}", line));
         }
+    }
+
+    fn render_cell_error(&self) {
+        let cell = self
+            .runtime
+            .get_cell(self.cursor_position.0, self.cursor_position.1);
+        let Ok(cell) = cell else {
+            return;
+        };
+        let Some(error) = &cell.error else {
+            return;
+        };
+
+        let (expression_start, expression_len) = self.expression_source_span();
+        let (underline_start, underline_len) = match error.location.first() {
+            Some(&point) => (expression_start + point, 1),
+            None => (expression_start, expression_len.max(1)),
+        };
+
+        // +1 for the window border, +1 for the leading padding space
+        // rendered by render_source_code.
+        let screen_x = 2 + underline_start as i32;
+
+        // Color just the offending span of the formula itself, without
+        // touching the characters render_source_code already drew there.
+        self.source_code_window.mvchgat(
+            2,
+            screen_x,
+            underline_len as i32,
+            A_BOLD,
+            ERROR_COLOR_PAIR,
+        );
+
+        let error_style = A_BOLD | COLOR_PAIR(ERROR_COLOR_PAIR as pancurses::chtype);
+        self.source_code_window.attron(error_style);
+        self.source_code_window
+            .mvaddstr(3, screen_x, "-".repeat(underline_len));
+        self.source_code_window.mvaddnstr(
+            4,
+            1,
+            &error.error_message,
+            self.source_code_window.get_max_x() - 2,
+        );
+        self.source_code_window.attroff(error_style);
+    }
+
+    // Where in new_source_code the parsed expression (the part after '=')
+    // begins, and how long it is. A cell error's location indices are
+    // relative to that substring, not the raw source text.
+    fn expression_source_span(&self) -> (usize, usize) {
+        let leading_whitespace =
+            self.new_source_code.len() - self.new_source_code.trim_start().len();
+        let trimmed_len = self.new_source_code.trim().len();
+        let expression_len = trimmed_len.saturating_sub(1); // minus the leading '='
+        (leading_whitespace + 1, expression_len)
     }
 
     fn render_modal(&self) {
@@ -510,7 +604,11 @@ impl CurseController {
                 } else {
                     let cell = self.runtime.get_cell(x as i32, y as i32);
                     let cell = cell.unwrap(); // Not sure why this would error. Everything should be checked earlier
-                    cell.primative.serialize().unwrap() // Again, shouldn't error
+                    if cell.error.is_some() {
+                        "=ERROR".to_string()
+                    } else {
+                        cell.primative.serialize().unwrap() // Again, shouldn't error
+                    }
                 };
 
                 self.add_cell_text(x as i32, y as i32, text);

@@ -865,6 +865,7 @@ mod tests {
             source_code: String::new(),
             code: Box::new(num(value)),
             primative: Box::new(num(value)),
+            error: None,
         };
         runtime.set_cell(x, y, &cell).unwrap();
     }
@@ -878,6 +879,7 @@ mod tests {
             source_code: String::new(),
             code: Box::new(string_expr.clone()),
             primative: Box::new(string_expr),
+            error: None,
         };
         runtime.set_cell(x, y, &cell).unwrap();
     }

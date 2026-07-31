@@ -1,3 +1,4 @@
+use crate::errors::SourceCodeError;
 use crate::token::Token;
 
 use crate::expressions::Expression;
@@ -7,6 +8,7 @@ pub struct Cell {
     pub source_code: String,
     pub code: Box<Expression>,
     pub primative: Box<Expression>,
+    pub error: Option<SourceCodeError>,
 }
 
 impl Default for Cell {
@@ -25,6 +27,7 @@ impl Default for Cell {
             source_code,
             code,
             primative,
+            error: None,
         }
     }
 }
