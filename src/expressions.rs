@@ -323,10 +323,15 @@ impl Expression {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Number {
-                        source_token: left_source.merge(right_source),
-                        value: left_value / right_value,
-                    }),
+                    ) => {
+                        if right_value == 0.0 {
+                            return Err("Cannot divide by zero".to_string());
+                        }
+                        Ok(Expression::Number {
+                            source_token: left_source.merge(right_source),
+                            value: left_value / right_value,
+                        })
+                    }
                     _ => Err("Cannot divide non-numeric expressions".to_string()),
                 }
             }
@@ -348,10 +353,15 @@ impl Expression {
                             source_token: right_source,
                             value: right_value,
                         },
-                    ) => Ok(Expression::Number {
-                        source_token: left_source.merge(right_source),
-                        value: left_value % right_value,
-                    }),
+                    ) => {
+                        if right_value == 0.0 {
+                            return Err("Cannot mod by zero".to_string());
+                        }
+                        Ok(Expression::Number {
+                            source_token: left_source.merge(right_source),
+                            value: left_value % right_value,
+                        })
+                    }
                     _ => Err("Cannot mod non-numeric expressions".to_string()),
                 }
             }
@@ -938,14 +948,25 @@ mod tests {
     }
 
     #[test]
-    fn division_by_zero_yields_infinity_rather_than_erroring() {
+    fn division_by_zero_errors() {
         let runtime = Runtime::new((1, 1));
         let division = Expression::Division {
             source_token: Token::default(),
             left_expression: Box::new(num(1.0)),
             right_expression: Box::new(num(0.0)),
         };
-        assert!(value_of(&division, &runtime).is_infinite());
+        assert!(eval(&division, &runtime).is_err());
+    }
+
+    #[test]
+    fn mod_by_zero_errors() {
+        let runtime = Runtime::new((1, 1));
+        let modulo = Expression::Modulo {
+            source_token: Token::default(),
+            left_expression: Box::new(num(1.0)),
+            right_expression: Box::new(num(0.0)),
+        };
+        assert!(eval(&modulo, &runtime).is_err());
     }
 
     #[test]
