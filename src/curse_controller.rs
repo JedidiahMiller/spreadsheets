@@ -1,5 +1,6 @@
 use pancurses::{
-    A_BOLD, ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS, ACS_ULCORNER, ACS_URCORNER, ACS_VLINE,
+    A_BOLD, A_REVERSE, ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_PLUS, ACS_ULCORNER, ACS_URCORNER,
+    ACS_VLINE,
 };
 use pancurses::{Window, curs_set, endwin, initscr, noecho};
 
@@ -430,8 +431,8 @@ impl CurseController {
 
         // Grid
         self.create_grid();
-        self.highlight_cell(self.cursor_position.0, self.cursor_position.1);
         self.render_cell_contents();
+        self.highlight_cell(self.cursor_position.0, self.cursor_position.1);
 
         // Error modal
         if let OperationMode::Modal = self.operation_mode {
@@ -501,10 +502,16 @@ impl CurseController {
     fn render_cell_contents(&self) {
         for x in 0..self.grid_size.0 {
             for y in 0..self.grid_size.1 {
-                let cell = self.runtime.get_cell(x as i32, y as i32);
-                let cell = cell.unwrap(); // Not sure why this would error. Everything should be checked earlier
+                let is_being_edited = matches!(self.operation_mode, OperationMode::Edit)
+                    && (x as i32, y as i32) == self.cursor_position;
 
-                let text = cell.primative.serialize().unwrap(); // Again, shouldn't error
+                let text = if is_being_edited {
+                    self.new_source_code.clone()
+                } else {
+                    let cell = self.runtime.get_cell(x as i32, y as i32);
+                    let cell = cell.unwrap(); // Not sure why this would error. Everything should be checked earlier
+                    cell.primative.serialize().unwrap() // Again, shouldn't error
+                };
 
                 self.add_cell_text(x as i32, y as i32, text);
             }
@@ -572,13 +579,36 @@ impl CurseController {
         let left_corner_x = (x + 1) * GAP_SIZE - 1;
         let left_corner_y = (y + 1) * 2 - 1;
 
-        self.grid_window.mvaddch(left_corner_y, left_corner_x, 'X');
+        // Invert the whole cell's interior so the selection is unmistakable,
+        // even on terminals without color support.
+        self.grid_window.mvchgat(
+            left_corner_y + 1,
+            left_corner_x + 1,
+            GAP_SIZE - 1,
+            A_REVERSE,
+            0,
+        );
+
+        // A bold border around the selected cell, replacing the thin grid
+        // lines drawn by create_grid at this position.
+        self.grid_window.attron(A_BOLD);
+        for i in (left_corner_x + 1)..(left_corner_x + GAP_SIZE) {
+            self.grid_window.mvaddch(left_corner_y, i, ACS_HLINE());
+            self.grid_window.mvaddch(left_corner_y + 2, i, ACS_HLINE());
+        }
         self.grid_window
-            .mvaddch(left_corner_y + 2, left_corner_x, 'X');
+            .mvaddch(left_corner_y + 1, left_corner_x, ACS_VLINE());
         self.grid_window
-            .mvaddch(left_corner_y, left_corner_x + GAP_SIZE, 'X');
+            .mvaddch(left_corner_y + 1, left_corner_x + GAP_SIZE, ACS_VLINE());
         self.grid_window
-            .mvaddch(left_corner_y + 2, left_corner_x + GAP_SIZE, 'X');
+            .mvaddch(left_corner_y, left_corner_x, ACS_ULCORNER());
+        self.grid_window
+            .mvaddch(left_corner_y, left_corner_x + GAP_SIZE, ACS_URCORNER());
+        self.grid_window
+            .mvaddch(left_corner_y + 2, left_corner_x, ACS_LLCORNER());
+        self.grid_window
+            .mvaddch(left_corner_y + 2, left_corner_x + GAP_SIZE, ACS_LRCORNER());
+        self.grid_window.attroff(A_BOLD);
     }
 
     fn create_grid(&self) {
