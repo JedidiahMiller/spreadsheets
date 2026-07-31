@@ -85,7 +85,6 @@ impl Lexer {
             // Parentheses
             ("(".to_string(), TokenType::OpeningParenthesis),
             (")".to_string(), TokenType::ClosingParenthesis),
-            ("#".to_string(), TokenType::PoundSign),
             (",".to_string(), TokenType::Comma),
             // Keywords
             ("+".to_string(), TokenType::Addition),
@@ -208,11 +207,10 @@ mod tests {
     #[test]
     fn lexes_symbols() {
         assert_eq!(
-            types("()#,"),
+            types("(),"),
             vec![
                 TokenType::OpeningParenthesis,
                 TokenType::ClosingParenthesis,
-                TokenType::PoundSign,
                 TokenType::Comma,
             ]
         );
@@ -309,6 +307,11 @@ mod tests {
     fn errors_on_unknown_symbol() {
         let result = Lexer::lex(&"1 @ 2".to_string());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn errors_on_pound_sign() {
+        assert!(Lexer::lex(&"#B3".to_string()).is_err());
     }
 
     #[test]

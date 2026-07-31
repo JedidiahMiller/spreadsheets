@@ -57,7 +57,6 @@ pub enum TokenType {
 
     OpeningParenthesis,
     ClosingParenthesis,
-    PoundSign,
     Comma,
 
     Number,

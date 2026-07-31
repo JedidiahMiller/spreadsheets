@@ -427,7 +427,7 @@ impl CurseController {
         // Source code window
         self.render_source_code();
         self.box_window(&self.source_code_window);
-        self.highlight_source_box();
+        self.render_mode_indicator();
 
         // Grid
         self.create_grid();
@@ -562,17 +562,20 @@ impl CurseController {
         self.add_centered_cell_text(x, y, "".to_string());
     }
 
-    fn highlight_source_box(&self) {
-        self.source_code_window.mvaddch(0, 0, 'X');
-        self.source_code_window
-            .mvaddch(self.source_code_window.get_max_y() - 1, 0, 'X');
-        self.source_code_window.mvaddch(
-            self.source_code_window.get_max_y() - 1,
-            self.source_code_window.get_max_x() - 1,
-            'X',
-        );
-        self.source_code_window
-            .mvaddch(0, self.source_code_window.get_max_x() - 1, 'X');
+    fn render_mode_indicator(&self) {
+        let label = format!(" {} ", self.mode_label());
+        self.source_code_window.attron(A_BOLD);
+        self.source_code_window.mvaddstr(0, 1, label);
+        self.source_code_window.attroff(A_BOLD);
+    }
+
+    fn mode_label(&self) -> &'static str {
+        match self.operation_mode {
+            OperationMode::Normal => "NORMAL",
+            OperationMode::Edit => "EDIT",
+            OperationMode::Command => "COMMAND",
+            OperationMode::Modal => "MODAL",
+        }
     }
 
     fn highlight_cell(&self, x: i32, y: i32) {

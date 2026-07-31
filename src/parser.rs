@@ -205,16 +205,9 @@ impl Parser {
                 value,
             });
         }
-        if self.accept(TokenType::PoundSign)? {
-            let token = self.expect(TokenType::CellReference)?;
-            return Ok(Expression::RValue {
-                source_token: token.clone(),
-                cell_address: Box::new(Self::parse_cell_reference(token)),
-            });
-        }
         if self.has(TokenType::CellReference) {
             let token = self.consume()?;
-            return Ok(Expression::LValue {
+            return Ok(Expression::CellReference {
                 source_token: token.clone(),
                 cell_address: Box::new(Self::parse_cell_reference(token)),
             });
@@ -319,18 +312,13 @@ mod tests {
     }
 
     #[test]
-    fn parses_lvalue_cell_address() {
+    fn parses_cell_reference() {
         assert_eq!(serialized("B3"), "B3");
     }
 
     #[test]
     fn parses_multi_letter_column_cell_address() {
         assert_eq!(serialized("AB12"), "AB12");
-    }
-
-    #[test]
-    fn parses_rvalue_cell_address() {
-        assert_eq!(serialized("#B3"), "#B3");
     }
 
     #[test]

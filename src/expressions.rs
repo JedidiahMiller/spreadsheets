@@ -54,11 +54,7 @@ pub enum Expression {
         expression: Box<Expression>,
     },
 
-    LValue {
-        source_token: Token,
-        cell_address: Box<Expression>,
-    },
-    RValue {
+    CellReference {
         source_token: Token,
         cell_address: Box<Expression>,
     },
@@ -170,14 +166,10 @@ impl Expression {
                 expression,
             } => Ok(format!("-{}", expression.serialize()?)),
 
-            Expression::LValue {
+            Expression::CellReference {
                 source_token: _,
                 cell_address,
             } => Ok(format!("{}", cell_address.serialize()?)),
-            Expression::RValue {
-                source_token: _,
-                cell_address,
-            } => Ok(format!("#{}", cell_address.serialize()?)),
 
             Expression::Max {
                 source_token: _,
@@ -406,26 +398,7 @@ impl Expression {
                 }
             }
 
-            Expression::LValue {
-                source_token: _,
-                cell_address,
-            } => {
-                let address = cell_address.evaluate(runtime, context)?;
-
-                match address {
-                    Expression::CellAddress {
-                        source_token,
-                        x_value,
-                        y_value,
-                    } => Ok(Expression::CellAddress {
-                        source_token: source_token.capture(),
-                        x_value,
-                        y_value,
-                    }),
-                    _ => Err("Cell address must be specified using two integers".to_string()),
-                }
-            }
-            Expression::RValue {
+            Expression::CellReference {
                 source_token: _,
                 cell_address,
             } => {
@@ -459,7 +432,7 @@ impl Expression {
                             _ => Err("Something went very wrong".to_string()),
                         }
                     }
-                    _ => Err("RValue must contain a cell address".to_string()),
+                    _ => Err("Cell reference must contain a cell address".to_string()),
                 }
             }
 
@@ -468,8 +441,8 @@ impl Expression {
                 first_address,
                 last_address,
             } => {
-                let first_postition = first_address.evaluate(runtime, context)?;
-                let last_position = last_address.evaluate(runtime, context)?;
+                let first_postition = evaluate_cell_address(first_address, runtime, context)?;
+                let last_position = evaluate_cell_address(last_address, runtime, context)?;
 
                 match (first_postition, last_position) {
                     (
@@ -567,8 +540,8 @@ impl Expression {
                 first_address,
                 last_address,
             } => {
-                let first_postition = first_address.evaluate(runtime, context)?;
-                let last_position = last_address.evaluate(runtime, context)?;
+                let first_postition = evaluate_cell_address(first_address, runtime, context)?;
+                let last_position = evaluate_cell_address(last_address, runtime, context)?;
 
                 match (first_postition, last_position) {
                     (
@@ -665,8 +638,8 @@ impl Expression {
                 first_address,
                 last_address,
             } => {
-                let first_postition = first_address.evaluate(runtime, context)?;
-                let last_position = last_address.evaluate(runtime, context)?;
+                let first_postition = evaluate_cell_address(first_address, runtime, context)?;
+                let last_position = evaluate_cell_address(last_address, runtime, context)?;
 
                 // This match purely to appease the rust type system.
                 // The items should be numbers at this point.
@@ -747,8 +720,8 @@ impl Expression {
                 first_address,
                 last_address,
             } => {
-                let first_postition = first_address.evaluate(runtime, context)?;
-                let last_position = last_address.evaluate(runtime, context)?;
+                let first_postition = evaluate_cell_address(first_address, runtime, context)?;
+                let last_position = evaluate_cell_address(last_address, runtime, context)?;
 
                 match (first_postition, last_position) {
                     (
@@ -827,6 +800,20 @@ impl Expression {
     }
 }
 
+// Range functions (sum/min/max/mean) need the raw address a cell reference
+// points to, not the value it dereferences to, so this reaches past
+// CellReference's evaluate() to the address it wraps.
+fn evaluate_cell_address(
+    expression: &Expression,
+    runtime: &Runtime,
+    context: &mut CellContext,
+) -> Result<Expression, String> {
+    match expression {
+        Expression::CellReference { cell_address, .. } => cell_address.evaluate(runtime, context),
+        _ => Err("Parameters must be cell references".to_string()),
+    }
+}
+
 fn float_equals(a: f64, b: f64) -> bool {
     // Numbers within a millionth of each other are consitered equal
     const FLOAT_COMPARISON_TOLERANCE: f64 = 0.000001;
@@ -851,6 +838,13 @@ mod tests {
             source_token: Token::default(),
             x_value: Box::new(num(x)),
             y_value: Box::new(num(y)),
+        }
+    }
+
+    fn cell_reference(x: f64, y: f64) -> Expression {
+        Expression::CellReference {
+            source_token: Token::default(),
+            cell_address: Box::new(cell_address(x, y)),
         }
     }
 
@@ -967,33 +961,25 @@ mod tests {
     }
 
     #[test]
-    fn rvalue_reads_referenced_cell() {
+    fn cell_reference_dereferences_to_the_referenced_cells_value() {
         let mut runtime = Runtime::new((3, 3));
         set_number(&mut runtime, 1, 2, 42.0);
 
-        let rvalue = Expression::RValue {
-            source_token: Token::default(),
-            cell_address: Box::new(cell_address(1.0, 2.0)),
-        };
-        assert_eq!(value_of(&rvalue, &runtime), 42.0);
+        assert_eq!(value_of(&cell_reference(1.0, 2.0), &runtime), 42.0);
     }
 
     #[test]
-    fn lvalue_evaluates_to_its_own_cell_address() {
-        let runtime = Runtime::new((3, 3));
-        let lvalue = Expression::LValue {
+    fn bare_cell_references_can_be_used_directly_in_arithmetic() {
+        let mut runtime = Runtime::new((3, 3));
+        set_number(&mut runtime, 0, 0, 2.0);
+        set_number(&mut runtime, 1, 0, 3.0);
+
+        let addition = Expression::Addition {
             source_token: Token::default(),
-            cell_address: Box::new(cell_address(1.0, 2.0)),
+            left_expression: Box::new(cell_reference(0.0, 0.0)),
+            right_expression: Box::new(cell_reference(1.0, 0.0)),
         };
-        match eval(&lvalue, &runtime).unwrap() {
-            Expression::CellAddress {
-                x_value, y_value, ..
-            } => {
-                assert_eq!(value_of(&x_value, &runtime), 1.0);
-                assert_eq!(value_of(&y_value, &runtime), 2.0);
-            }
-            other => panic!("expected a cell address, got {:?}", other),
-        }
+        assert_eq!(value_of(&addition, &runtime), 5.0);
     }
 
     fn range_functions_setup() -> Runtime {
@@ -1010,8 +996,8 @@ mod tests {
         let runtime = range_functions_setup();
         let sum = Expression::Sum {
             source_token: Token::default(),
-            first_address: Box::new(cell_address(0.0, 0.0)),
-            last_address: Box::new(cell_address(1.0, 1.0)),
+            first_address: Box::new(cell_reference(0.0, 0.0)),
+            last_address: Box::new(cell_reference(1.0, 1.0)),
         };
         assert_eq!(value_of(&sum, &runtime), 10.0);
     }
@@ -1021,8 +1007,8 @@ mod tests {
         let runtime = range_functions_setup();
         let mean = Expression::Mean {
             source_token: Token::default(),
-            first_address: Box::new(cell_address(0.0, 0.0)),
-            last_address: Box::new(cell_address(1.0, 1.0)),
+            first_address: Box::new(cell_reference(0.0, 0.0)),
+            last_address: Box::new(cell_reference(1.0, 1.0)),
         };
         assert_eq!(value_of(&mean, &runtime), 2.5);
     }
@@ -1032,8 +1018,8 @@ mod tests {
         let runtime = range_functions_setup();
         let max = Expression::Max {
             source_token: Token::default(),
-            first_address: Box::new(cell_address(0.0, 0.0)),
-            last_address: Box::new(cell_address(1.0, 1.0)),
+            first_address: Box::new(cell_reference(0.0, 0.0)),
+            last_address: Box::new(cell_reference(1.0, 1.0)),
         };
         assert_eq!(value_of(&max, &runtime), 4.0);
     }
@@ -1043,8 +1029,8 @@ mod tests {
         let runtime = range_functions_setup();
         let min = Expression::Min {
             source_token: Token::default(),
-            first_address: Box::new(cell_address(0.0, 0.0)),
-            last_address: Box::new(cell_address(1.0, 1.0)),
+            first_address: Box::new(cell_reference(0.0, 0.0)),
+            last_address: Box::new(cell_reference(1.0, 1.0)),
         };
         assert_eq!(value_of(&min, &runtime), 1.0);
     }
@@ -1059,8 +1045,8 @@ mod tests {
 
         let sum = Expression::Sum {
             source_token: Token::default(),
-            first_address: Box::new(cell_address(0.0, 0.0)),
-            last_address: Box::new(cell_address(1.0, 1.0)),
+            first_address: Box::new(cell_reference(0.0, 0.0)),
+            last_address: Box::new(cell_reference(1.0, 1.0)),
         };
         assert!(eval(&sum, &runtime).is_err());
     }
